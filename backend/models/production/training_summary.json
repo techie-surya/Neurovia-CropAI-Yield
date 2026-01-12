@@ -1,0 +1,54 @@
+{
+  "yield": {
+    "rmse": 7.970315147726761,
+    "mae": 6.154830366143087,
+    "r2": 0.11374087573726654,
+    "cv_r2_mean": 0.1151063206936078,
+    "cv_r2_std": 0.007329866085185452,
+    "samples_train": 20732,
+    "samples_test": 5184,
+    "features": [
+      "rainfall",
+      "temperature",
+      "pesticides"
+    ]
+  },
+  "crop": {
+    "accuracy": 0.9840909090909091,
+    "report": "              precision    recall  f1-score   support\n\n       apple       1.00      1.00      1.00        20\n      banana       1.00      1.00      1.00        20\n   blackgram       1.00      0.85      0.92        20\n    chickpea       1.00      1.00      1.00        20\n     coconut       1.00      1.00      1.00        20\n      coffee       1.00      1.00      1.00        20\n      cotton       1.00      1.00      1.00        20\n      grapes       1.00      1.00      1.00        20\n        jute       0.91      1.00      0.95        20\n kidneybeans       1.00      1.00      1.00        20\n      lentil       1.00      0.90      0.95        20\n       maize       0.95      1.00      0.98        20\n       mango       1.00      1.00      1.00        20\n   mothbeans       0.91      1.00      0.95        20\n    mungbean       0.91      1.00      0.95        20\n   muskmelon       1.00      1.00      1.00        20\n      orange       1.00      1.00      1.00        20\n      papaya       1.00      1.00      1.00        20\n  pigeonpeas       1.00      1.00      1.00        20\n pomegranate       1.00      1.00      1.00        20\n        rice       1.00      0.90      0.95        20\n  watermelon       1.00      1.00      1.00        20\n\n    accuracy                           0.98       440\n   macro avg       0.99      0.98      0.98       440\nweighted avg       0.99      0.98      0.98       440\n",
+    "samples_train": 1760,
+    "samples_test": 440,
+    "features": [
+      "nitrogen",
+      "phosphorus",
+      "potassium",
+      "temperature",
+      "ph",
+      "rainfall"
+    ],
+    "classes": [
+      "apple",
+      "banana",
+      "blackgram",
+      "chickpea",
+      "coconut",
+      "coffee",
+      "cotton",
+      "grapes",
+      "jute",
+      "kidneybeans",
+      "lentil",
+      "maize",
+      "mango",
+      "mothbeans",
+      "mungbean",
+      "muskmelon",
+      "orange",
+      "papaya",
+      "pigeonpeas",
+      "pomegranate",
+      "rice",
+      "watermelon"
+    ]
+  }
+}

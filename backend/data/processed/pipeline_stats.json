@@ -1,0 +1,38 @@
+{
+  "validation": {
+    "kaggle_crop": {
+      "samples": 2200,
+      "features": 8,
+      "crops": 22
+    },
+    "kaggle_yield": {
+      "samples": 28242,
+      "features": 8
+    }
+  },
+  "processing": {
+    "kaggle_crop": {
+      "input_samples": 2200,
+      "output_samples": 2200,
+      "features": 10
+    },
+    "kaggle_yield": {
+      "input_samples": 28242,
+      "output_samples": 28242,
+      "features": 9
+    }
+  },
+  "combination": {
+    "crop": {
+      "total_samples": 2200,
+      "final_samples": 2200,
+      "unique_crops": 22,
+      "features": 8
+    },
+    "yield": {
+      "total_samples": 28242,
+      "final_samples": 25916,
+      "features": 5
+    }
+  }
+}
