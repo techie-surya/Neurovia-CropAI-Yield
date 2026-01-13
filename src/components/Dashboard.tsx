@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { predictCropYield, recommendCrops, predictWeatherRisk, calculateFeatureImportance } from '../utils/mockMLModels';
 import { WeatherWidget } from './WeatherWidget';
@@ -6,6 +7,7 @@ import { useI18n } from '../context/LanguageContext';
 
 export function Dashboard() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   // Sample dashboard data
   const [dashboardData] = useState({
     totalPredictions: 47,
@@ -215,7 +217,10 @@ export function Dashboard() {
           <p className="text-sm text-gray-600 mb-4">
             {t('yieldPredictionDesc')}
           </p>
-          <button className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition-colors text-sm font-medium">
+          <button
+            className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+            onClick={() => navigate('/yield')}
+          >
             {t('startPrediction')}
           </button>
         </div>
@@ -226,7 +231,10 @@ export function Dashboard() {
           <p className="text-sm text-gray-600 mb-4">
             {t('recommendationsDesc')}
           </p>
-          <button className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
+          <button
+            className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+            onClick={() => navigate('/recommendation')}
+          >
             {t('getRecommendations')}
           </button>
         </div>
@@ -237,7 +245,10 @@ export function Dashboard() {
           <p className="text-sm text-gray-600 mb-4">
             Test different scenarios and optimize your farming decisions
           </p>
-          <button className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700 transition-colors text-sm font-medium">
+          <button
+            className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+            onClick={() => navigate('/simulator')}
+          >
             Run Simulation
           </button>
         </div>
