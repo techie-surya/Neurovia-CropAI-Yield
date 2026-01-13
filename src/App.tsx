@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { YieldPrediction } from './components/YieldPrediction';
 import { CropRecommendation } from './components/CropRecommendation';
@@ -10,11 +11,32 @@ import { ExplainableAI } from './components/ExplainableAI';
 import { Weather } from './components/Weather';
 import { useI18n } from './context/LanguageContext';
 import { AuthModal, AuthMode } from './components/AuthModal';
+import { authAPI } from './utils/api';
 
 function App() {
   const { t } = useI18n();
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState('');
   const navigate = useNavigate();
+
+  // Check if user is logged in on mount
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      setIsLoggedIn(true);
+      // Try to get user name
+      try {
+        const userStr = localStorage.getItem('currentUser');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          setUserName(user.name || user.email);
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+  }, []);
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
@@ -22,6 +44,42 @@ function App() {
 
   const closeAuth = () => {
     setAuthMode(null);
+  };
+
+  const handleLoginSuccess = () => {
+    // Close modal first
+    setAuthMode(null);
+    
+    // Get fresh data from localStorage
+    const token = localStorage.getItem('authToken');
+    const userStr = localStorage.getItem('currentUser');
+    
+    console.log('Login success - Token:', !!token, 'User:', userStr?.substring(0, 50));
+    
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        console.log('Setting user:', user.name || user.email);
+        setUserName(user.name || user.email);
+        setIsLoggedIn(true);
+      } catch (e) {
+        console.error('Parse error:', e);
+      }
+    }
+    navigate('/');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authAPI.logout();
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('currentUser');
+      setIsLoggedIn(false);
+      setUserName('');
+      navigate('/');
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
   };
 
   const navLinks = [
@@ -50,13 +108,45 @@ function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => openAuth('login')}
-                type="button"
-                className="px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm cursor-pointer"
-              >
-                {t('login')}
-              </button>
+              {(() => {
+                // Check localStorage directly to ensure real-time updates
+                const token = localStorage.getItem('authToken');
+                const userStr = localStorage.getItem('currentUser');
+                
+                if (token && userStr) {
+                  try {
+                    const user = JSON.parse(userStr);
+                    const displayName = user.name || user.email;
+                    return (
+                      <>
+                        <div className="text-sm text-gray-700 px-3 py-2">
+                          Welcome, <span className="font-semibold">{displayName}</span>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          type="button"
+                          className="px-4 py-2.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors text-sm cursor-pointer"
+                        >
+                          Logout
+                        </button>
+                      </>
+                    );
+                  } catch (e) {
+                    // Fall through to login button if parse fails
+                  }
+                }
+                
+                // Default: show login button
+                return (
+                  <button
+                    onClick={() => openAuth('login')}
+                    type="button"
+                    className="px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-sm cursor-pointer"
+                  >
+                    {t('login')}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>

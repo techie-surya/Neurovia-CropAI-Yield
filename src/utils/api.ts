@@ -93,10 +93,46 @@ export const authAPI = {
   },
 
   /**
-   * Logout (clear token)
+   * Update user profile
+   */
+  updateProfile: async (data: { name?: string; email?: string }) => {
+    return makeRequest('/auth/update-profile', 'PUT', data);
+  },
+
+  /**
+   * Change password
+   */
+  changePassword: async (data: { old_password: string; new_password: string }) => {
+    return makeRequest('/auth/change-password', 'PUT', data);
+  },
+
+  /**
+   * Delete account
+   */
+  deleteAccount: async () => {
+    return makeRequest('/auth/delete-account', 'DELETE');
+  },
+
+  /**
+   * Logout user
    */
   logout: () => {
     clearAuthToken();
+    return Promise.resolve({ message: 'Logged out successfully' });
+  },
+
+  /**
+   * Send OTP to phone number
+   */
+  sendOTP: async (data: { phone: string; aadhar: string }) => {
+    return makeRequest('/auth/send-otp', 'POST', data);
+  },
+
+  /**
+   * Verify OTP
+   */
+  verifyOTP: async (data: { phone: string; otp: string }) => {
+    return makeRequest('/auth/verify-otp', 'POST', data);
   },
 };
 
@@ -154,6 +190,13 @@ export const predictionAPI = {
    */
   getHistory: async () => {
     return makeRequest('/prediction-history', 'GET');
+  },
+
+  /**
+   * Get dashboard statistics
+   */
+  getDashboardStats: async () => {
+    return makeRequest('/dashboard-stats', 'GET');
   },
 };
 

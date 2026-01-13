@@ -43,8 +43,13 @@ jwt = JWTManager(app)
 
 # MongoDB Connection
 try:
-    client = MongoClient(MONGODB_URI)
-    db = client['agroai']
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=2000)
+    # Extract database name from URI or use default
+    db_name = MONGODB_URI.split('/')[-1].split('?')[0] if '/' in MONGODB_URI else 'neurovia'
+    db = client[db_name]
+    
+    # Test connection
+    client.admin.command('ping')
     
     # Create collections if they don't exist
     if 'users' not in db.list_collection_names():
@@ -59,9 +64,18 @@ try:
     db['predictions'].create_index('created_at')
     
     print("✓ MongoDB connected successfully!")
+    USE_MOCK_DB = False
+    
 except Exception as e:
     print(f"✗ MongoDB connection error: {e}")
-    print("Make sure MongoDB is running: mongod")
+    print("⚠ Falling back to mock database (JSON files)...")
+    from database import MockClient, MockMongoDB
+    
+    client = MockClient(MONGODB_URI)
+    db_name = 'neurovia'
+    db = client[db_name]
+    USE_MOCK_DB = True
+    print("✓ Mock database initialized successfully!")
 
 # Load ML models (lazy load when needed)
 models = {
@@ -366,6 +380,115 @@ def get_profile():
         return jsonify(user_to_dict(user)), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/update-profile', methods=['PUT'])
+@jwt_required()
+def update_profile():
+    """Update user profile (CRUD - Update)"""
+    from flask_jwt_extended import get_jwt_identity
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Find user
+        user = db['users'].find_one({'_id': ObjectId(user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Update allowed fields
+        update_fields = {}
+        if 'name' in data:
+            update_fields['name'] = data['name']
+        if 'email' in data:
+            # Check if email already exists (and is not same user)
+            existing = db['users'].find_one({'email': data['email']})
+            if existing and str(existing['_id']) != user_id:
+                return jsonify({'error': 'Email already in use'}), 400
+            update_fields['email'] = data['email']
+        
+        if not update_fields:
+            return jsonify({'error': 'No fields to update'}), 400
+        
+        # Update in database
+        db['users'].update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': update_fields}
+        )
+        
+        # Get updated user
+        updated_user = db['users'].find_one({'_id': ObjectId(user_id)})
+        
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'user': user_to_dict(updated_user)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/change-password', methods=['PUT'])
+@jwt_required()
+def change_password():
+    """Change user password"""
+    from flask_jwt_extended import get_jwt_identity
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        if not data.get('old_password') or not data.get('new_password'):
+            return jsonify({'error': 'Old and new password required'}), 400
+        
+        # Find user
+        user = db['users'].find_one({'_id': ObjectId(user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Verify old password
+        if not check_password(user['password_hash'], data['old_password']):
+            return jsonify({'error': 'Invalid old password'}), 401
+        
+        # Update password
+        new_hash = hash_password(data['new_password'])
+        db['users'].update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': {'password_hash': new_hash}}
+        )
+        
+        return jsonify({'message': 'Password changed successfully'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/delete-account', methods=['DELETE'])
+@jwt_required()
+def delete_account():
+    """Delete user account (CRUD - Delete)"""
+    from flask_jwt_extended import get_jwt_identity
+    try:
+        user_id = get_jwt_identity()
+        
+        # Delete user
+        result = db['users'].delete_one({'_id': ObjectId(user_id)})
+        
+        if result.deleted_count == 0:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Also delete all predictions for this user
+        db['predictions'].delete_many({'user_id': ObjectId(user_id)})
+        
+        return jsonify({'message': 'Account deleted successfully'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """Logout user (frontend clears token)"""
+    return jsonify({'message': 'Logged out successfully'}), 200
 
 
 # ============================================
@@ -684,6 +807,65 @@ def get_prediction_history():
             'count': len(predictions),
             'predictions': [prediction_to_dict(p) for p in predictions]
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dashboard-stats', methods=['GET'])
+def get_dashboard_stats():
+    """Get dashboard statistics - aggregate stats across all users"""
+    from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+    from flask_jwt_extended.exceptions import NoAuthorizationError
+    
+    try:
+        # Try to get JWT to show personal recent predictions if logged in
+        try:
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+        except:
+            user_id = None
+        
+        # Get aggregate statistics from ALL users
+        total_farmers = db['users'].count_documents({})
+        
+        # Get ALL predictions from database (across all users)
+        all_predictions = list(db['predictions'].find({}))
+        
+        total_predictions = len(all_predictions)
+        
+        # Calculate aggregate yield statistics
+        yield_predictions = [p for p in all_predictions if p.get('prediction_type') == 'yield']
+        avg_yield = 0
+        if yield_predictions:
+            yields = [float(p.get('output_data', {}).get('yield', 0)) for p in yield_predictions if p.get('output_data', {}).get('yield')]
+            avg_yield = sum(yields) / len(yields) if yields else 0
+        
+        # Calculate aggregate success rate (predictions with confidence >= 70%)
+        success_count = 0
+        if all_predictions:
+            for p in all_predictions:
+                confidence = p.get('output_data', {}).get('confidence', 0)
+                if isinstance(confidence, (int, float)) and confidence >= 0.70:
+                    success_count += 1
+            success_rate = (success_count / len(all_predictions)) * 100
+        else:
+            success_rate = 0
+        
+        # If logged in, show user's recent predictions
+        recent_predictions = []
+        if user_id:
+            user_oid = ObjectId(user_id)
+            user_predictions = list(db['predictions'].find({'user_id': user_oid}).sort('timestamp', -1).limit(5))
+            recent_predictions = [prediction_to_dict(p) for p in user_predictions]
+        
+        return jsonify({
+            'total_predictions': total_predictions,
+            'avg_yield': round(avg_yield, 2),
+            'success_rate': round(success_rate, 0),
+            'active_farmers': total_farmers,
+            'recent_predictions': recent_predictions
+        }), 200
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
