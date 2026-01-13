@@ -6,7 +6,7 @@
 
 ## 🎯 ELEVATOR PITCH (30 seconds)
 
-> "AgroIntelliSense is an AI platform that helps farmers predict crop yields, test different farming scenarios, and make data-driven decisions BEFORE planting. Our killer feature is the **What-If Simulator** that lets farmers instantly compare scenarios without retraining models, potentially increasing yields by 15-25% while reducing costs by 20-30%."
+> "AgroIntelliSense is an AI platform that helps farmers predict crop yields, test different farming scenarios, and make data-driven decisions BEFORE planting. The **What-If Simulator** lets farmers instantly compare scenarios without retraining models, potentially increasing yields by 15-25% while reducing costs by 20-30%."
 
 ---
 

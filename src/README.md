@@ -342,7 +342,7 @@ AgroIntelliSense is a **complete, working, demo-ready** AI platform that address
 ✅ Professional, judge-friendly UI  
 ✅ Real-time predictions (no delays)  
 ✅ Interactive visualizations  
-✅ What-If Simulator (killer feature)  
+✅ What-If Simulator  
 ✅ Explainable AI for transparency  
 ✅ Clean, well-commented code  
 ✅ Comprehensive documentation  

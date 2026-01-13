@@ -226,7 +226,7 @@ All code follows best practices and is maintainable."
 |---------|------|-------------|
 | Opening | 30s | Problem & solution overview |
 | Yield Prediction | 60s | AI accuracy demonstration |
-| **What-If Simulator** | **90s** | **Killer feature showcase** |
+| **What-If Simulator** | **90s** | **Scenario testing showcase** |
 | Explainable AI | 45s | Trust and transparency |
 | Quick Tour | 30s | Complete solution |
 | Closing | 30s | Impact summary |

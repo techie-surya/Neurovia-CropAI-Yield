@@ -173,7 +173,7 @@ function App() {
               <p className="text-xs opacity-90">
                 1. Start with Dashboard overview<br />
                 2. Try Yield Prediction<br />
-                3. Test What-If Simulator (★ killer feature)<br />
+                3. Test What-If Simulator<br />
                 4. Show Explainable AI for trust
               </p>
             </div>
