@@ -88,4 +88,4 @@ MIT - see LICENSE for details
 ---
 
 **v1.0.0** | Production Ready 🚀
-  
+  new added by subham
