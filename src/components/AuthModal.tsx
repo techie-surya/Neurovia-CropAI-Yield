@@ -68,6 +68,11 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
         password: loginPassword,
       });
 
+      // Save user data to localStorage
+      if (response.user) {
+        localStorage.setItem('currentUser', JSON.stringify(response.user));
+      }
+
       setInfo(t('successLogin') || 'Login successful!');
       
       // Reset form

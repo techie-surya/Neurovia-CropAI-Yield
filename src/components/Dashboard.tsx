@@ -1,20 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { predictCropYield, recommendCrops, predictWeatherRisk, calculateFeatureImportance } from '../utils/mockMLModels';
 import { WeatherWidget } from './WeatherWidget';
 import { useI18n } from '../context/LanguageContext';
+import { predictionAPI } from '../utils/api';
 
 export function Dashboard() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  // Sample dashboard data
-  const [dashboardData] = useState({
-    totalPredictions: 47,
-    avgYield: 4250,
-    successRate: 89,
-    activeFarmers: 1234
+  
+  const [dashboardData, setDashboardData] = useState({
+    totalPredictions: 0,
+    avgYield: 0,
+    successRate: 0,
+    activeFarmers: 0
   });
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Fetch dashboard stats on mount
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Always fetch stats - backend returns public data if not logged in
+        const stats = await predictionAPI.getDashboardStats();
+        setDashboardData({
+          totalPredictions: stats.total_predictions || 0,
+          avgYield: stats.avg_yield || 0,
+          successRate: stats.success_rate || 0,
+          activeFarmers: stats.active_farmers || 0
+        });
+        setLoading(false);
+      } catch (err: any) {
+        console.error('Failed to fetch dashboard stats:', err);
+        // On error, still show active farmers count if available
+        setDashboardData({
+          totalPredictions: 0,
+          avgYield: 0,
+          successRate: 0,
+          activeFarmers: 0
+        });
+        setError('Could not load dashboard data');
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   // Sample yield trend data
   const yieldTrendData = [
@@ -58,13 +92,27 @@ export function Dashboard() {
     return colors[risk as keyof typeof colors] || 'bg-gray-100 text-gray-700';
   };
 
+  const token = localStorage.getItem('authToken');
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <p className="text-red-700">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
       <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg">
         <h1 className="text-3xl font-bold mb-2">🌾 {t('welcomeDashboard')}</h1>
         <p className="text-lg opacity-90">{t('dashboardSubtitle')}</p>
-        <p className="text-sm opacity-75 mt-2">{t('welcomeBack')}</p>
+        {token ? (
+          <p className="text-sm opacity-75 mt-2">📊 Your personalized dashboard - all predictions saved to database</p>
+        ) : (
+          <p className="text-sm opacity-75 mt-2">Login to see your personalized dashboard and predictions</p>
+        )}
       </div>
 
       {/* Key Metrics */}
@@ -74,7 +122,9 @@ export function Dashboard() {
             <div className="text-4xl">📊</div>
             <div>
               <div className="text-sm text-gray-600">{t('totalPredictions')}</div>
-              <div className="text-3xl font-bold text-gray-800">{dashboardData.totalPredictions}</div>
+              <div className="text-3xl font-bold text-gray-800">
+                {loading ? '...' : dashboardData.totalPredictions}
+              </div>
             </div>
           </div>
         </div>
@@ -84,7 +134,9 @@ export function Dashboard() {
             <div className="text-4xl">🌾</div>
             <div>
               <div className="text-sm text-gray-600">{t('avgYield')}</div>
-              <div className="text-3xl font-bold text-green-700">{dashboardData.avgYield}</div>
+              <div className="text-3xl font-bold text-green-700">
+                {loading ? '...' : dashboardData.avgYield}
+              </div>
               <div className="text-xs text-gray-500">kg/hectare</div>
             </div>
           </div>
@@ -95,7 +147,9 @@ export function Dashboard() {
             <div className="text-4xl">✅</div>
             <div>
               <div className="text-sm text-gray-600">{t('successRate')}</div>
-              <div className="text-3xl font-bold text-blue-700">{dashboardData.successRate}%</div>
+              <div className="text-3xl font-bold text-blue-700">
+                {loading ? '...' : `${dashboardData.successRate}%`}
+              </div>
             </div>
           </div>
         </div>
@@ -105,7 +159,9 @@ export function Dashboard() {
             <div className="text-4xl">👨‍🌾</div>
             <div>
               <div className="text-sm text-gray-600">{t('activeFarmers')}</div>
-              <div className="text-3xl font-bold text-purple-700">{dashboardData.activeFarmers.toLocaleString()}</div>
+              <div className="text-3xl font-bold text-purple-700">
+                {loading ? '...' : dashboardData.activeFarmers.toLocaleString()}
+              </div>
             </div>
           </div>
         </div>
