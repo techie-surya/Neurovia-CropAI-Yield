@@ -315,34 +315,6 @@ export function ExplainableAI() {
                 </div>
               </div>
 
-              {/* Trust Building Info */}
-              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-lg p-5">
-                <div className="flex items-start gap-4">
-                  <span className="text-3xl">🤝</span>
-                  <div>
-                    <h4 className="font-semibold text-blue-900 mb-2">Why This Matters - Building Trust in AI</h4>
-                    <ul className="space-y-1 text-sm text-blue-800">
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span><strong>Transparency:</strong> You can see exactly which factors the AI model considers important</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span><strong>Actionable Insights:</strong> Focus your efforts on improving high-importance factors</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span><strong>Data-Driven Decisions:</strong> Make informed choices based on machine learning analysis</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span><strong>Validate with Experience:</strong> Compare AI recommendations with your farming knowledge</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
               {/* Model Info */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <p className="text-xs text-gray-600 leading-relaxed">

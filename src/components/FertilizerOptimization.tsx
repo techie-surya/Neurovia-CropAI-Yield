@@ -49,9 +49,9 @@ export function FertilizerOptimization() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-2">🌿 Fertilizer & Water Optimization</h2>
-        <p className="opacity-90">Optimize resource usage and maximize crop yield with AI recommendations</p>
+      <div className="bg-green-600 text-white p-8 rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-3">🌿 Fertilizer & Water Optimization</h2>
+        <p className="text-lg opacity-95">Optimize resource usage and maximize crop yield with AI recommendations</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

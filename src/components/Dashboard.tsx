@@ -10,46 +10,375 @@ export function Dashboard() {
   const { t } = useI18n();
   const navigate = useNavigate();
   
-  const [dashboardData, setDashboardData] = useState({
+  // Use state for auth status so it can be updated
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('authToken'));
+  
+  const [dashboardData, setDashboardData] = useState<any>({
     totalPredictions: 0,
     avgYield: 0,
     successRate: 0,
     activeFarmers: 0
   });
-
+  
+  const [personalData, setPersonalData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Fetch dashboard stats on mount
+  // Fetch dashboard stats on mount and periodically
   useEffect(() => {
     const fetchStats = async () => {
+      // Re-check login status each time to catch login/logout changes
+      const currentToken = localStorage.getItem('authToken');
+      const isCurrentlyLoggedIn = !!currentToken;
+      
+      // Update login state if it changed
+      if (isCurrentlyLoggedIn !== isLoggedIn) {
+        console.log('Auth state changed:', isCurrentlyLoggedIn ? 'logged in' : 'logged out');
+      }
+      setIsLoggedIn(isCurrentlyLoggedIn);
+      
       try {
-        // Always fetch stats - backend returns public data if not logged in
         const stats = await predictionAPI.getDashboardStats();
-        setDashboardData({
-          totalPredictions: stats.total_predictions || 0,
-          avgYield: stats.avg_yield || 0,
-          successRate: stats.success_rate || 0,
-          activeFarmers: stats.active_farmers || 0
-        });
+        
+        if (stats.type === 'personal' && isCurrentlyLoggedIn) {
+          // User is logged in - show personal dashboard
+          setPersonalData(stats);
+          setDashboardData({
+            totalPredictions: 0,
+            avgYield: 0,
+            successRate: 0,
+            activeFarmers: 0
+          });
+        } else {
+          // Public dashboard - show aggregate stats
+          setDashboardData({
+            totalPredictions: stats.total_predictions || 0,
+            avgYield: stats.avg_yield || 0,
+            successRate: stats.success_rate || 0,
+            activeFarmers: stats.active_farmers || 0
+          });
+          setPersonalData(null);
+        }
         setLoading(false);
       } catch (err: any) {
         console.error('Failed to fetch dashboard stats:', err);
-        // On error, still show active farmers count if available
+        // Set default data instead of showing error
         setDashboardData({
           totalPredictions: 0,
           avgYield: 0,
           successRate: 0,
-          activeFarmers: 0
+          activeFarmers: 1
         });
-        setError('Could not load dashboard data');
+        setPersonalData(null);
+        setError(''); // Clear error to show dashboard with default data
         setLoading(false);
       }
     };
 
+    // Initial fetch
     fetchStats();
+    
+    // Set up polling every 3 seconds to check for new predictions
+    const interval = setInterval(fetchStats, 3000);
+    
+    // Also refresh when window regains focus
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchStats();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Also refresh when storage changes (logout from another tab)
+    const handleStorageChange = () => {
+      fetchStats();
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Listen for custom auth change events
+    const handleAuthChange = () => {
+      console.log('Auth change event received');
+      fetchStats();
+    };
+    window.addEventListener('auth-changed', handleAuthChange);
+    
+    // Cleanup
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth-changed', handleAuthChange);
+    };
   }, []);
 
+  // Sample yield trend data
+  const yieldTrendData = [
+    { month: 'Jan', yield: 3800 },
+    { month: 'Feb', yield: 4100 },
+    { month: 'Mar', yield: 4500 },
+    { month: 'Apr', yield: 4200 },
+    { month: 'May', yield: 4600 },
+    { month: 'Jun', yield: 4350 }
+  ];
+
+  // Crop distribution
+  const cropDistributionData = [
+    { name: 'Rice', value: 35, color: '#10b981' },
+    { name: 'Wheat', value: 25, color: '#f59e0b' },
+    { name: 'Corn', value: 20, color: '#3b82f6' },
+    { name: 'Others', value: 20, color: '#6b7280' }
+  ];
+
+  // Risk levels
+  const riskData = [
+    { level: 'Low Risk', count: 28, color: '#10b981' },
+    { level: 'Medium Risk', count: 15, color: '#f59e0b' },
+    { level: 'High Risk', count: 4, color: '#ef4444' }
+  ];
+
+  // Recent predictions (mock data)
+  const recentPredictions = [
+    { crop: 'Rice', yield: 4500, risk: 'Low', date: 'Jan 8, 2026' },
+    { crop: 'Wheat', yield: 3200, risk: 'Medium', date: 'Jan 7, 2026' },
+    { crop: 'Corn', yield: 5500, risk: 'Low', date: 'Jan 6, 2026' },
+    { crop: 'Cotton', yield: 2800, risk: 'High', date: 'Jan 5, 2026' }
+  ];
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <p className="text-red-700">{error}</p>
+      </div>
+    );
+  }
+
+  // Show personal dashboard if logged in and data available
+  if (isLoggedIn && personalData) {
+    return <PersonalDashboard data={personalData} loading={loading} />;
+  }
+
+  // Show public dashboard if not logged in
+  return <PublicDashboard data={dashboardData} loading={loading} isLoggedIn={isLoggedIn} />;
+}
+
+// Personal Dashboard Component (for logged-in users)
+function PersonalDashboard({ data, loading }: { data: any; loading: boolean }) {
+  const { t } = useI18n();
+  
+  const user = data.user || {};
+  const yearSummary = data.year_summary || {};
+  const stats = data.statistics || {};
+  const riskDist = data.risk_distribution || {};
+  const cropRec = data.crop_recommendations || {};
+  const recentPreds = data.recent_predictions || [];
+  
+  // Get current date
+  const currentDate = new Date().toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Personalized Welcome - CLEARLY PERSONAL */}
+      <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg border-4 border-green-400">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">👤 {user.name}'s Personal Dashboard</h1>
+            <p className="text-xl opacity-90">Your individual farming analytics & predictions for {yearSummary.year}</p>
+            <p className="text-sm opacity-75 mt-2">📧 {user.email}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold">📅</p>
+            <p className="text-sm">{currentDate}</p>
+          </div>
+        </div>
+        <div className="bg-green-700 bg-opacity-40 rounded p-3 mt-4">
+          <p className="text-sm font-semibold">✅ You are logged in - showing YOUR personalized data</p>
+        </div>
+      </div>
+
+      {/* Personal Statistics Cards */}
+      <div className="grid md:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200 hover:shadow-lg transition">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">📊</div>
+            <div>
+              <div className="text-sm text-gray-600">Your Predictions (2026)</div>
+              <div className="text-3xl font-bold text-blue-700">
+                {loading ? '...' : yearSummary.total_predictions}
+              </div>
+              <div className="text-xs text-gray-500">All-time: {stats.total_predictions_all_time}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-md border border-green-200 hover:shadow-lg transition">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">🌾</div>
+            <div>
+              <div className="text-sm text-gray-600">Avg Yield</div>
+              <div className="text-3xl font-bold text-green-700">
+                {loading ? '...' : stats.avg_yield}
+              </div>
+              <div className="text-xs text-gray-500">kg/hectare</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-md border border-yellow-200 hover:shadow-lg transition">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">🎯</div>
+            <div>
+              <div className="text-sm text-gray-600">Success Rate</div>
+              <div className="text-3xl font-bold text-yellow-700">
+                {loading ? '...' : `${stats.success_rate}%`}
+              </div>
+              <div className="text-xs text-gray-500">High confidence predictions</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-md border border-purple-200 hover:shadow-lg transition">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">🌱</div>
+            <div>
+              <div className="text-sm text-gray-600">Top Crop</div>
+              <div className="text-3xl font-bold text-purple-700">
+                {loading ? '...' : stats.top_crop}
+              </div>
+              <div className="text-xs text-gray-500">Most recommended</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2026 Prediction Summary */}
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 Your 2026 Prediction Summary</h3>
+        <div className="grid md:grid-cols-4 gap-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="text-sm text-gray-600">Yield Predictions</div>
+            <div className="text-2xl font-bold text-blue-600">{yearSummary.yield_predictions}</div>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg">
+            <div className="text-sm text-gray-600">Crop Recommendations</div>
+            <div className="text-2xl font-bold text-green-600">{yearSummary.crop_predictions}</div>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-lg">
+            <div className="text-sm text-gray-600">Risk Assessments</div>
+            <div className="text-2xl font-bold text-yellow-600">{yearSummary.risk_predictions}</div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <div className="text-sm text-gray-600">Total</div>
+            <div className="text-2xl font-bold text-purple-600">{yearSummary.total_predictions}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Crop Recommendations */}
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">🌽 Your Crop Recommendations</h3>
+        {Object.keys(cropRec).length > 0 ? (
+          <div className="grid md:grid-cols-3 gap-4">
+            {Object.entries(cropRec).map(([crop, count]: [string, any]) => (
+              <div key={crop} className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                <div className="font-semibold text-green-800">{crop}</div>
+                <div className="text-2xl font-bold text-green-600 mt-2">{count}</div>
+                <div className="text-sm text-gray-600">recommendations</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-gray-500 text-center py-4">No crop predictions yet. Make your first prediction!</div>
+        )}
+      </div>
+
+      {/* Risk Distribution */}
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Risk Assessment Summary</h3>
+        {Object.keys(riskDist).length > 0 ? (
+          <div className="grid md:grid-cols-3 gap-4">
+            {Object.entries(riskDist).map(([risk, count]: [string, any]) => {
+              const colors = {
+                'Low': 'bg-green-50 border-green-200 text-green-700',
+                'Medium': 'bg-yellow-50 border-yellow-200 text-yellow-700',
+                'High': 'bg-red-50 border-red-200 text-red-700'
+              };
+              const colorClass = colors[risk as keyof typeof colors] || 'bg-gray-50';
+              return (
+                <div key={risk} className={`${colorClass} border p-4 rounded-lg`}>
+                  <div className="font-semibold">{risk} Risk</div>
+                  <div className="text-2xl font-bold mt-2">{count}</div>
+                  <div className="text-sm opacity-75">assessments</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-gray-500 text-center py-4">No risk predictions yet.</div>
+        )}
+      </div>
+
+      {/* Recent Predictions Table */}
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Your Recent Predictions</h3>
+        {recentPreds.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100 border-b">
+                <tr>
+                  <th className="px-4 py-2 text-left">Type</th>
+                  <th className="px-4 py-2 text-left">Details</th>
+                  <th className="px-4 py-2 text-left">Confidence</th>
+                  <th className="px-4 py-2 text-left">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentPreds.slice(0, 10).map((pred: any, idx: number) => (
+                  <tr key={idx} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-2 font-semibold text-gray-700">{pred.prediction_type?.toUpperCase()}</td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {pred.output_data?.crop && `Crop: ${pred.output_data.crop}`}
+                      {pred.output_data?.yield && `Yield: ${pred.output_data.yield} kg/ha`}
+                      {pred.output_data?.risk_level && `Risk: ${pred.output_data.risk_level}`}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
+                        {(pred.output_data?.confidence * 100 || 0).toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-500 text-xs">
+                      {new Date(pred.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-gray-500 text-center py-4">No predictions yet. Start making predictions to see them here!</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Public Dashboard Component (for non-logged-in users)
+function PublicDashboard({ data, loading, isLoggedIn }: { data: any; loading: boolean; isLoggedIn: boolean }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  
+  // Get current date
+  const currentDate = new Date().toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
   // Sample yield trend data
   const yieldTrendData = [
     { month: 'Jan', yield: 3800 },
@@ -92,27 +421,23 @@ export function Dashboard() {
     return colors[risk as keyof typeof colors] || 'bg-gray-100 text-gray-700';
   };
 
-  const token = localStorage.getItem('authToken');
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-        <p className="text-red-700">{error}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold mb-2">🌾 {t('welcomeDashboard')}</h1>
-        <p className="text-lg opacity-90">{t('dashboardSubtitle')}</p>
-        {token ? (
-          <p className="text-sm opacity-75 mt-2">📊 Your personalized dashboard - all predictions saved to database</p>
-        ) : (
-          <p className="text-sm opacity-75 mt-2">Login to see your personalized dashboard and predictions</p>
-        )}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8 rounded-lg shadow-lg border-4 border-blue-400">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">🌍 Community Dashboard</h1>
+            <p className="text-xl opacity-90">Aggregate statistics from all farmers using AgroAI Platform</p>
+            <div className="bg-blue-700 bg-opacity-40 rounded p-3 mt-4">
+              <p className="text-sm font-semibold">ℹ️ This is PUBLIC community data - NOT personalized</p>
+              <p className="text-sm mt-1">👤 To see YOUR personal dashboard and save predictions, <span className="font-bold cursor-pointer hover:underline" onClick={() => navigate('/login')}>LOGIN</span> or <span className="font-bold cursor-pointer hover:underline" onClick={() => navigate('/register')}>REGISTER</span></p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold">📅</p>
+            <p className="text-sm">{currentDate}</p>
+          </div>
+        </div>
       </div>
 
       {/* Key Metrics */}
@@ -123,7 +448,7 @@ export function Dashboard() {
             <div>
               <div className="text-sm text-gray-600">{t('totalPredictions')}</div>
               <div className="text-3xl font-bold text-gray-800">
-                {loading ? '...' : dashboardData.totalPredictions}
+                {loading ? '...' : data.totalPredictions}
               </div>
             </div>
           </div>
@@ -135,7 +460,7 @@ export function Dashboard() {
             <div>
               <div className="text-sm text-gray-600">{t('avgYield')}</div>
               <div className="text-3xl font-bold text-green-700">
-                {loading ? '...' : dashboardData.avgYield}
+                {loading ? '...' : data.avgYield}
               </div>
               <div className="text-xs text-gray-500">kg/hectare</div>
             </div>
@@ -148,7 +473,7 @@ export function Dashboard() {
             <div>
               <div className="text-sm text-gray-600">{t('successRate')}</div>
               <div className="text-3xl font-bold text-blue-700">
-                {loading ? '...' : `${dashboardData.successRate}%`}
+                {loading ? '...' : `${data.successRate}%`}
               </div>
             </div>
           </div>
@@ -160,7 +485,7 @@ export function Dashboard() {
             <div>
               <div className="text-sm text-gray-600">{t('activeFarmers')}</div>
               <div className="text-3xl font-bold text-purple-700">
-                {loading ? '...' : dashboardData.activeFarmers.toLocaleString()}
+                {loading ? '...' : data.activeFarmers.toLocaleString()}
               </div>
             </div>
           </div>
@@ -268,7 +593,7 @@ export function Dashboard() {
       {/* Quick Actions */}
       <div className="grid md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-lg border-2 border-green-200">
-          <div className="text-3xl mb-3">🔮</div>
+          <div className="text-3xl mb-3" aria-hidden="true"></div>
           <h4 className="font-semibold text-gray-800 mb-2">{t('predictYield')}</h4>
           <p className="text-sm text-gray-600 mb-4">
             {t('yieldPredictionDesc')}

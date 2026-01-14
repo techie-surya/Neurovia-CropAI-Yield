@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../context/LanguageContext';
+import { authAPI } from '../utils/api';
 
 export function RegisterPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', aadhar: '', password: '', confirm: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -14,10 +16,14 @@ export function RegisterPage() {
 
   const validateEmail = (email: string) => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(email);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
+    if (!form.name) {
+      setError('Name is required');
+      return;
+    }
     if (!validateEmail(form.email)) {
       setError(t('email'));
       return;
@@ -31,8 +37,32 @@ export function RegisterPage() {
       return;
     }
 
-    window.alert(t('successRegistration'));
-    navigate('/login');
+    setLoading(true);
+    try {
+      const result = await authAPI.register({
+        name: form.name,
+        email: form.email,
+        aadhar: form.aadhar,
+        password: form.password
+      });
+
+      if (result.access_token) {
+        // Store user data
+        if (result.user) {
+          localStorage.setItem('currentUser', JSON.stringify(result.user));
+        }
+        window.alert(t('successRegistration'));
+        // Give localStorage a moment to be read, then redirect
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 100);
+      }
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      setError(err.message || 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -95,9 +125,10 @@ export function RegisterPage() {
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button
           type="submit"
-          className="w-full py-2.5 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors"
+          disabled={loading}
+          className="w-full py-2.5 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          {t('register')}
+          {loading ? 'Creating account...' : t('register')}
         </button>
         <div className="text-sm text-center">
           {t('loginLink')}{' '}

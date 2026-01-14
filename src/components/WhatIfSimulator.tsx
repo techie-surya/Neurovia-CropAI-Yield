@@ -125,9 +125,9 @@ export function WhatIfSimulator() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-2">🎯 What-If Scenario Simulator</h2>
-        <p className="opacity-90">Compare different farming scenarios in real-time without retraining the model</p>
+      <div className="bg-green-600 text-white p-8 rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-3">🎯 What-If Scenario Simulator</h2>
+        <p className="text-lg opacity-95">Compare different farming scenarios in real-time without retraining the model</p>
       </div>
 
       {/* Input Comparison */}

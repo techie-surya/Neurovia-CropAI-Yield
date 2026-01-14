@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { CROP_DATABASE, type CropName, type PredictionInput, predictWeatherRisk, estimateSoilPH } from '../utils/mockMLModels';
 import { useI18n } from '../context/LanguageContext';
+import { predictionAPI } from '../utils/api';
+import { useEffect } from 'react';
 
 export function RiskPrediction() {
   const { t } = useI18n();
@@ -19,21 +21,134 @@ export function RiskPrediction() {
 
   const [risk, setRisk] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [key, setKey] = useState(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Helper function to derive overall severity
+  const deriveOverall = (alert: string): 'Low' | 'Medium' | 'High' => {
+    const msg = (alert || '').toUpperCase();
+    if (msg.includes('CRITICAL') || msg.includes('WARNING') || msg.includes('HIGH')) return 'High';
+    if (msg.includes('CAUTION') || msg.includes('MONITOR') || msg.includes('MEDIUM')) return 'Medium';
+    return 'Low';
+  };
+
+  // Recalculate risk whenever formData changes (real-time updates)
+  useEffect(() => {
+    const estimatedPH = estimateSoilPH(formData.soilType, formData.soilColor, formData.waterlogging);
+    const localRisk = predictWeatherRisk({ ...formData, phCategory: estimatedPH });
+    
+    console.log('🔄 Risk recalculated:', {
+      rainfall: formData.rainfall,
+      floodRisk: localRisk.floodRisk,
+      droughtRisk: localRisk.droughtRisk,
+      heatStressRisk: localRisk.heatStressRisk,
+      alert: localRisk.overallAlert
+    });
+    
+    const overallAlert = localRisk.overallAlert || '⚡ CAUTION: Monitor weather conditions closely';
+    const overallLevel = deriveOverall(overallAlert);
+
+    // Update UI immediately when inputs change
+    setRisk({
+      overall: overallLevel,
+      overallAlert,
+      score: 0,
+      drought: localRisk.droughtRisk,
+      droughtRisk: localRisk.droughtRisk,
+      flood: localRisk.floodRisk,
+      floodRisk: localRisk.floodRisk,
+      heatStress: localRisk.heatStressRisk,
+      heatStressRisk: localRisk.heatStressRisk,
+      factors: localRisk.recommendations,
+      recommendations: localRisk.recommendations,
+      confidence: 75
+    });
+  }, [formData]);
+
+  // Force re-render on auth changes
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setKey(prev => prev + 1);
+    };
+    
+    window.addEventListener('auth-changed', handleAuthChange);
+    return () => window.removeEventListener('auth-changed', handleAuthChange);
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Calculate pH category from soil characteristics
-    const estimatedPH = estimateSoilPH(formData.soilType, formData.soilColor, formData.waterlogging);
-    const updatedFormData = { ...formData, phCategory: estimatedPH };
-    setFormData(updatedFormData);
+    try {
+      // Use current formData directly - don't call setFormData since it's async
+      const estimatedPH = estimateSoilPH(formData.soilType, formData.soilColor, formData.waterlogging);
+      
+      // The risk is ALREADY calculated by useEffect whenever formData changes
+      // handleSubmit just needs to call backend for confidence/score
+      // Keep the current risk values - DON'T override them
+      const currentRisk = risk; // Save current correct values
+      
+      const getPHValue = (cat: string): number => {
+        const map: Record<string, number> = {
+          'Strongly Acidic': 5.0, 'Acidic': 5.5, 'Slightly Acidic': 6.0,
+          'Neutral': 7.0, 'Slightly Alkaline': 7.5, 'Alkaline': 8.0, 'Strongly Alkaline': 8.5
+        };
+        return map[cat] || 7.0;
+      };
 
-    setTimeout(() => {
-      const result = predictWeatherRisk(updatedFormData);
-      setRisk(result);
+      const calculateSoilDrainage = (): number => {
+        let score = 75;
+        switch (formData.soilType) {
+          case 'Clay': score = 40; break;
+          case 'Peaty': score = 30; break;
+          case 'Silty': score = 60; break;
+          case 'Sandy': score = 95; break;
+          default: score = 75;
+        }
+        if (formData.waterlogging === 'Yes') score -= 30;
+        else if (formData.waterlogging === 'Occasional') score -= 15;
+        return Math.max(20, Math.min(100, score));
+      };
+
+      try {
+        const prediction = await predictionAPI.predictRisk({
+          crop: formData.crop as string,
+          nitrogen: formData.nitrogen,
+          phosphorus: formData.phosphorus,
+          potassium: formData.potassium,
+          ph: getPHValue(estimatedPH),
+          rainfall: formData.rainfall,
+          temperature: formData.temperature,
+          humidity: 70,
+          soil_ph: getPHValue(estimatedPH),
+          soil_drainage: calculateSoilDrainage(),
+          soil_moisture: 60,
+          crop_age: 50
+        });
+
+        // IMPORTANT: Only update confidence/score from backend
+        // Keep all risk breakdown values from local calculation
+        const conf = prediction.confidence || 0.85;
+        
+        setRisk(prev => ({
+          ...prev, // Keep all existing correct values
+          confidence: conf * 100,
+          score: prediction.risk_score || 0.5
+        }));
+        
+        console.log('✅ Risk assessment complete - local breakdown preserved:', {
+          droughtRisk: currentRisk?.droughtRisk,
+          floodRisk: currentRisk?.floodRisk,
+          heatStressRisk: currentRisk?.heatStressRisk,
+          confidence: conf * 100
+        });
+      } catch (error) {
+        console.error('Risk prediction error:', error);
+        // On error, keep the local risk calculation - don't override
+        console.log('ℹ️ Using local risk calculation (backend unavailable)');
+      }
+    } finally {
       setIsLoading(false);
-    }, 700);
+    }
   };
 
   const handleInputChange = (field: keyof PredictionInput, value: string | number) => {
@@ -59,9 +174,9 @@ export function RiskPrediction() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white p-6 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-2">⚠️ Weather & Climate Risk Prediction</h2>
-        <p className="opacity-90">Predict and prepare for drought, flood, and heat stress risks</p>
+      <div className="bg-red-600 text-white p-8 rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-3">⚠️ Weather & Climate Risk Prediction</h2>
+        <p className="text-lg opacity-95">Predict and prepare for drought, flood, and heat stress risks</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

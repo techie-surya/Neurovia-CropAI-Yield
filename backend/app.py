@@ -33,6 +33,19 @@ PRODUCTION_DIR = os.path.join(MODEL_DIR, 'production')
 app = Flask(__name__)
 CORS(app)
 
+# Custom JSON encoder for ObjectId
+from flask.json.provider import DefaultJSONProvider
+
+class MongoDBJSONProvider(DefaultJSONProvider):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        if hasattr(o, 'isoformat'):
+            return o.isoformat()
+        return super().default(o)
+
+app.json = MongoDBJSONProvider(app)
+
 # Configuration
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/agroai')
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
@@ -92,14 +105,14 @@ models = {
 def load_models():
     """Load pre-trained ML models"""
     global models
-    try:
-        def resolve(path_list):
-            """Return first existing path from list"""
-            for p in path_list:
-                if os.path.exists(p):
-                    return p
-            return None
+    def resolve(path_list):
+        """Return first existing path from list"""
+        for p in path_list:
+            if os.path.exists(p):
+                return p
+        return None
 
+    try:
         # Yield model (prefer production)
         yield_model_path = resolve([
             os.path.join(PRODUCTION_DIR, 'yield_model.pkl'),
@@ -110,9 +123,12 @@ def load_models():
             os.path.join(MODEL_DIR, 'yield_scaler.pkl')
         ])
         if yield_model_path and yield_scaler_path:
-            models['yield_model'] = joblib.load(yield_model_path)
-            models['yield_scaler'] = joblib.load(yield_scaler_path)
-            print(f"Yield model loaded from {yield_model_path}")
+            try:
+                models['yield_model'] = joblib.load(yield_model_path)
+                models['yield_scaler'] = joblib.load(yield_scaler_path)
+                print(f"✓ Yield model loaded from {yield_model_path}")
+            except Exception as e:
+                print(f"⚠ Failed to load yield model: {e}")
 
         # Crop model (prefer production)
         crop_model_path = resolve([
@@ -128,10 +144,13 @@ def load_models():
             os.path.join(MODEL_DIR, 'crop_label_encoder.pkl')
         ])
         if crop_model_path and crop_scaler_path and crop_encoder_path:
-            models['crop_model'] = joblib.load(crop_model_path)
-            models['crop_scaler'] = joblib.load(crop_scaler_path)
-            models['crop_label_encoder'] = joblib.load(crop_encoder_path)
-            print(f"Crop model loaded from {crop_model_path}")
+            try:
+                models['crop_model'] = joblib.load(crop_model_path)
+                models['crop_scaler'] = joblib.load(crop_scaler_path)
+                models['crop_label_encoder'] = joblib.load(crop_encoder_path)
+                print(f"✓ Crop model loaded from {crop_model_path}")
+            except Exception as e:
+                print(f"⚠ Failed to load crop model: {e}")
 
         # Risk model (currently synthetic)
         risk_model_path = resolve([
@@ -147,20 +166,25 @@ def load_models():
             os.path.join(MODEL_DIR, 'risk_label_encoder.pkl')
         ])
         if risk_model_path and risk_scaler_path and risk_encoder_path:
-            models['risk_model'] = joblib.load(risk_model_path)
-            models['risk_scaler'] = joblib.load(risk_scaler_path)
-            models['risk_label_encoder'] = joblib.load(risk_encoder_path)
-            print(f"Risk model loaded from {risk_model_path}")
+            try:
+                models['risk_model'] = joblib.load(risk_model_path)
+                models['risk_scaler'] = joblib.load(risk_scaler_path)
+                models['risk_label_encoder'] = joblib.load(risk_encoder_path)
+                print(f"✓ Risk model loaded from {risk_model_path}")
+            except Exception as e:
+                print(f"⚠ Failed to load risk model: {e}")
 
         # Check if any model is missing
         models_loaded = [k for k, v in models.items() if '_model' in k and v is not None]
-        if len(models_loaded) < 3:
-            print(f"Warning: only {len(models_loaded)}/3 models loaded. Train missing models if needed.")
+        if len(models_loaded) == 0:
+            print("⚠ No ML models loaded. Using mock predictions for all endpoints.")
+        elif len(models_loaded) < 3:
+            print(f"⚠ Only {len(models_loaded)}/3 models loaded. Using mock fallback for missing models.")
         else:
-            print("All ML models loaded successfully.")
+            print("✓ All ML models loaded successfully.")
             
     except Exception as e:
-        print(f"⚠ Error loading models: {e}")
+        print(f"⚠ Critical error in load_models: {e}")
         print("⚠ Using mock predictions as fallback.")
 
 # Crop mapping
@@ -192,11 +216,22 @@ def user_to_dict(user):
     return user
 
 def prediction_to_dict(prediction):
-    """Convert MongoDB prediction document to dictionary"""
+    """Convert MongoDB prediction document to dictionary, converting ObjectIds to strings"""
     if not prediction:
         return None
+    
+    # Convert main _id to id
     prediction['id'] = str(prediction['_id'])
     del prediction['_id']
+    
+    # Convert user_id if it's an ObjectId
+    if 'user_id' in prediction and isinstance(prediction['user_id'], ObjectId):
+        prediction['user_id'] = str(prediction['user_id'])
+    
+    # Convert created_at to ISO format if it exists
+    if 'created_at' in prediction and hasattr(prediction['created_at'], 'isoformat'):
+        prediction['created_at'] = prediction['created_at'].isoformat()
+    
     return prediction
 
 
@@ -496,12 +531,19 @@ def logout():
 # ============================================
 
 @app.route('/api/predict-yield', methods=['POST'])
-@jwt_required()
 def predict_yield():
-    """Predict crop yield"""
+    """Predict crop yield - works for both guests and logged-in users"""
     try:
-        from flask_jwt_extended import get_jwt_identity
-        user_id = get_jwt_identity()
+        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+        
+        # Try to verify JWT but don't fail if missing
+        user_id = None
+        try:
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+        except:
+            user_id = None
+        
         data = request.get_json()
         
         # Extract features for the trained model
@@ -536,30 +578,41 @@ def predict_yield():
         
         yield_pred = max(1500, min(8000, yield_pred))  # Ensure reasonable range
         
-        # Save to MongoDB
-        prediction_doc = {
-            'user_id': ObjectId(user_id),
-            'prediction_type': 'yield',
-            'input_data': {
-                'rainfall': data.get('rainfall'),
-                'temperature': data.get('temperature'),
-                'nitrogen': data.get('nitrogen'),
-                'phosphorus': data.get('phosphorus'),
-                'potassium': data.get('potassium'),
-                'soil_moisture': data.get('soil_moisture'),
-                'humidity': data.get('humidity')
-            },
-            'output_data': {'yield': float(yield_pred)},
-            'model_type': 'trained' if models['yield_model'] else 'mock',
-            'created_at': datetime.utcnow()
-        }
-        db['predictions'].insert_one(prediction_doc)
+        # Save to MongoDB only if user is logged in
+        saved = False
+        if user_id:
+            prediction_doc = {
+                'user_id': ObjectId(user_id),
+                'prediction_type': 'yield',
+                'input_data': {
+                    'rainfall': data.get('rainfall'),
+                    'temperature': data.get('temperature'),
+                    'nitrogen': data.get('nitrogen'),
+                    'phosphorus': data.get('phosphorus'),
+                    'potassium': data.get('potassium'),
+                    'soil_moisture': data.get('soil_moisture'),
+                    'humidity': data.get('humidity')
+                },
+                'output_data': {'yield': float(yield_pred), 'confidence': confidence},
+                'model_type': 'trained' if models['yield_model'] else 'mock',
+                'created_at': datetime.utcnow()
+            }
+            result = db['predictions'].insert_one(prediction_doc)
+            
+            # Update user's prediction count
+            db['users'].update_one(
+                {'_id': ObjectId(user_id)},
+                {'$inc': {'total_predictions': 1}}
+            )
+            saved = True
         
         return jsonify({
             'yield': round(float(yield_pred), 2),
             'unit': 'kg/hectare',
             'confidence': round(confidence, 2),
-            'model_status': 'Trained Model' if models['yield_model'] else 'Mock Model'
+            'model_status': 'Trained Model' if models['yield_model'] else 'Mock Model',
+            'saved': saved,
+            'message': 'Prediction saved to your profile' if saved else 'Login to save predictions'
         }), 200
         
     except Exception as e:
@@ -589,12 +642,19 @@ def monitor_models():
 
 
 @app.route('/api/predict-crop', methods=['POST'])
-@jwt_required()
 def predict_crop():
-    """Recommend crop"""
+    """Recommend crop - works for both guests and logged-in users"""
     try:
-        from flask_jwt_extended import get_jwt_identity
-        user_id = get_jwt_identity()
+        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+        
+        # Try to verify JWT but don't fail if missing
+        user_id = None
+        try:
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+        except:
+            user_id = None
+        
         data = request.get_json()
         
         # Extract features for the trained model
@@ -652,22 +712,31 @@ def predict_crop():
                 for _ in range(3)
             ]
         
-        # Save to MongoDB
-        prediction_doc = {
-            'user_id': ObjectId(user_id),
-            'prediction_type': 'crop',
-            'input_data': {
-                'rainfall': data.get('rainfall'),
-                'temperature': data.get('temperature'),
-                'soil_type': data.get('soil_type'),
-                'season': data.get('season'),
-                'ph_level': data.get('ph_level')
-            },
-            'output_data': {'crop': crop_name, 'confidence': confidence},
-            'model_type': 'trained' if models['crop_model'] else 'mock',
-            'created_at': datetime.utcnow()
-        }
-        db['predictions'].insert_one(prediction_doc)
+        # Save to MongoDB only if user is logged in
+        saved = False
+        if user_id:
+            prediction_doc = {
+                'user_id': ObjectId(user_id),
+                'prediction_type': 'crop',
+                'input_data': {
+                    'rainfall': data.get('rainfall'),
+                    'temperature': data.get('temperature'),
+                    'soil_type': data.get('soil_type'),
+                    'season': data.get('season'),
+                    'ph_level': data.get('ph_level')
+                },
+                'output_data': {'crop': crop_name, 'confidence': confidence},
+                'model_type': 'trained' if models['crop_model'] else 'mock',
+                'created_at': datetime.utcnow()
+            }
+            result = db['predictions'].insert_one(prediction_doc)
+            
+            # Update user's prediction count
+            db['users'].update_one(
+                {'_id': ObjectId(user_id)},
+                {'$inc': {'total_predictions': 1}}
+            )
+            saved = True
         
         return jsonify({
             'recommended_crop': crop_name,
@@ -677,7 +746,9 @@ def predict_crop():
                 {'crop': 'rice', 'confidence': 0.70},
                 {'crop': 'wheat', 'confidence': 0.20},
                 {'crop': 'maize', 'confidence': 0.10}
-            ]
+            ],
+            'saved': saved,
+            'message': 'Prediction saved to your profile' if saved else 'Login to save predictions'
         }), 200
         
     except Exception as e:
@@ -685,21 +756,34 @@ def predict_crop():
 
 
 @app.route('/api/predict-risk', methods=['POST'])
-@jwt_required()
 def predict_risk():
-    """Predict farming risk"""
+    """Predict farming risk with enhanced features - works for both guests and logged-in users"""
     try:
-        from flask_jwt_extended import get_jwt_identity
-        user_id = get_jwt_identity()
+        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+        
+        # Try to verify JWT but don't fail if missing
+        user_id = None
+        try:
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+        except:
+            user_id = None
+        
         data = request.get_json()
         
-        # Extract features for the trained model
+        # Extract enhanced features for the trained model
+        # Feature order: temperature, humidity, rainfall, crop_age, soil_moisture, nitrogen, phosphorus, potassium, soil_ph, soil_drainage
         input_features = np.array([[
             data.get('temperature', 25),
             data.get('humidity', 65),
             data.get('rainfall', 100),
             data.get('crop_age', 50),
-            data.get('soil_moisture', 50)
+            data.get('soil_moisture', 50),
+            data.get('nitrogen', 80),
+            data.get('phosphorus', 40),
+            data.get('potassium', 40),
+            data.get('soil_ph', 7.0),
+            data.get('soil_drainage', 75)
         ]])
         
         confidence = 0.80
@@ -719,40 +803,121 @@ def predict_risk():
                 
             except Exception as model_error:
                 print(f"Risk model prediction error: {model_error}")
-                # Fallback to mock
-                risk_name = 'low'
-                confidence = 0.70
+                # Fallback to enhanced mock logic
+                risk_score = 0
+                
+                # Assess from input parameters
+                temp_diff = abs(data.get('temperature', 25) - 28)
+                if temp_diff > 8:
+                    risk_score += 30
+                elif temp_diff > 5:
+                    risk_score += 15
+                
+                if data.get('humidity', 65) > 80:
+                    risk_score += 20
+                
+                rainfall = data.get('rainfall', 100)
+                if rainfall < 50:
+                    risk_score += 25
+                elif rainfall > 200:
+                    risk_score += 20
+                
+                if data.get('nitrogen', 80) < 50:
+                    risk_score += 20
+                if data.get('potassium', 40) < 30:
+                    risk_score += 25
+                
+                if risk_score > 70:
+                    risk_name = 'high'
+                elif risk_score > 40:
+                    risk_name = 'medium'
+                else:
+                    risk_name = 'low'
+                confidence = 0.75
         else:
-            # Mock prediction when model not available
-            risk_levels = ['low', 'medium', 'high']
-            risk_name = np.random.choice(risk_levels)
-            confidence = np.random.uniform(0.6, 0.85)
+            # Mock prediction when model not available with better logic
+            risk_score = 0
+            temp_diff = abs(data.get('temperature', 25) - 28)
+            if temp_diff > 10:
+                risk_score += 35
+            elif temp_diff > 5:
+                risk_score += 15
+            
+            humidity = data.get('humidity', 65)
+            if humidity > 85:
+                risk_score += 25
+            elif humidity > 75:
+                risk_score += 12
+            
+            rainfall = data.get('rainfall', 100)
+            if rainfall < 40:
+                risk_score += 30
+            elif rainfall < 60:
+                risk_score += 15
+            elif rainfall > 200:
+                risk_score += 25
+            
+            nitrogen = data.get('nitrogen', 80)
+            if nitrogen < 40:
+                risk_score += 20
+            
+            potassium = data.get('potassium', 40)
+            if potassium < 30:
+                risk_score += 25
+            
+            soil_drainage = data.get('soil_drainage', 75)
+            if soil_drainage < 50:
+                risk_score += 20
+            
+            if risk_score > 70:
+                risk_name = 'high'
+            elif risk_score > 40:
+                risk_name = 'medium'
+            else:
+                risk_name = 'low'
+            confidence = 0.72
         
         # Capitalize for display
         risk_display = risk_name.capitalize()
         
-        # Save to MongoDB
-        prediction_doc = {
-            'user_id': ObjectId(user_id),
-            'prediction_type': 'risk',
-            'input_data': {
-                'temperature': data.get('temperature'),
-                'humidity': data.get('humidity'),
-                'rainfall': data.get('rainfall'),
-                'crop_age': data.get('crop_age'),
-                'soil_moisture': data.get('soil_moisture')
-            },
-            'output_data': {'risk_level': risk_display},
-            'model_type': 'trained' if models['risk_model'] else 'mock',
-            'created_at': datetime.utcnow()
-        }
-        db['predictions'].insert_one(prediction_doc)
+        # Save to MongoDB only if user is logged in
+        saved = False
+        if user_id:
+            prediction_doc = {
+                'user_id': ObjectId(user_id),
+                'prediction_type': 'risk',
+                'input_data': {
+                    'temperature': data.get('temperature'),
+                    'humidity': data.get('humidity'),
+                    'rainfall': data.get('rainfall'),
+                    'crop_age': data.get('crop_age'),
+                    'soil_moisture': data.get('soil_moisture'),
+                    'nitrogen': data.get('nitrogen'),
+                    'phosphorus': data.get('phosphorus'),
+                    'potassium': data.get('potassium'),
+                    'soil_ph': data.get('soil_ph'),
+                    'soil_drainage': data.get('soil_drainage')
+                },
+                'output_data': {'risk_level': risk_display, 'confidence': confidence},
+                'model_type': 'trained' if models['risk_model'] else 'mock',
+                'created_at': datetime.utcnow()
+            }
+            result = db['predictions'].insert_one(prediction_doc)
+            
+            # Update user's prediction count
+            db['users'].update_one(
+                {'_id': ObjectId(user_id)},
+                {'$inc': {'total_predictions': 1}}
+            )
+            saved = True
         
         return jsonify({
             'risk_level': risk_display,
             'confidence': round(confidence, 2),
-            'model_status': 'Trained Model' if models['risk_model'] else 'Mock Model',
-            'recommendations': get_risk_recommendations(risk_display)
+            'model_status': 'Enhanced Trained Model' if models['risk_model'] else 'Enhanced Mock Model',
+            'recommendations': get_risk_recommendations(risk_display),
+            'saved': saved,
+            'message': 'Prediction saved to your profile' if saved else 'Login to save predictions'
         }), 200
         
     except Exception as e:
@@ -795,16 +960,32 @@ def health_check():
 @app.route('/api/prediction-history', methods=['GET'])
 @jwt_required()
 def get_prediction_history():
-    """Get user's prediction history"""
+    """Get user's prediction history with optional filtering"""
     from flask_jwt_extended import get_jwt_identity
     try:
         user_id = get_jwt_identity()
-        predictions = list(db['predictions'].find(
-            {'user_id': ObjectId(user_id)}
-        ).sort('created_at', -1))
+        
+        # Optional query parameters
+        prediction_type = request.args.get('type')  # 'yield', 'crop', or 'risk'
+        limit = request.args.get('limit', default=100, type=int)
+        
+        # Build query
+        query = {'user_id': ObjectId(user_id)}
+        if prediction_type:
+            query['prediction_type'] = prediction_type
+        
+        # Get predictions
+        predictions = list(db['predictions'].find(query).sort('created_at', -1).limit(limit))
+        
+        # Group by type for summary
+        summary = {}
+        for p in predictions:
+            ptype = p.get('prediction_type')
+            summary[ptype] = summary.get(ptype, 0) + 1
         
         return jsonify({
             'count': len(predictions),
+            'summary': summary,
             'predictions': [prediction_to_dict(p) for p in predictions]
         }), 200
     except Exception as e:
@@ -813,18 +994,31 @@ def get_prediction_history():
 
 @app.route('/api/dashboard-stats', methods=['GET'])
 def get_dashboard_stats():
-    """Get dashboard statistics - aggregate stats across all users"""
+    """Get dashboard statistics - shows aggregate stats for public, personal stats for logged-in users"""
     from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
-    from flask_jwt_extended.exceptions import NoAuthorizationError
     
     try:
-        # Try to get JWT to show personal recent predictions if logged in
+        # Try to get JWT to check if user is logged in
+        user_id = None
         try:
             verify_jwt_in_request(optional=True)
             user_id = get_jwt_identity()
         except:
-            user_id = None
+            pass
         
+        # If user is logged in, return personal dashboard
+        if user_id:
+            return get_personal_dashboard(user_id)
+        else:
+            return get_aggregate_dashboard()
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def get_aggregate_dashboard():
+    """Get aggregate statistics for non-logged-in users"""
+    try:
         # Get aggregate statistics from ALL users
         total_farmers = db['users'].count_documents({})
         
@@ -851,23 +1045,483 @@ def get_dashboard_stats():
         else:
             success_rate = 0
         
-        # If logged in, show user's recent predictions
-        recent_predictions = []
-        if user_id:
-            user_oid = ObjectId(user_id)
-            user_predictions = list(db['predictions'].find({'user_id': user_oid}).sort('timestamp', -1).limit(5))
-            recent_predictions = [prediction_to_dict(p) for p in user_predictions]
-        
         return jsonify({
+            'type': 'aggregate',
             'total_predictions': total_predictions,
             'avg_yield': round(avg_yield, 2),
             'success_rate': round(success_rate, 0),
             'active_farmers': total_farmers,
-            'recent_predictions': recent_predictions
+            'message': 'Community statistics - Log in to see your personal predictions'
         }), 200
-            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def get_personal_dashboard(user_id):
+    """Get personal dashboard statistics for logged-in users"""
+    try:
+        user_oid = ObjectId(user_id)
+        
+        # Get user info
+        user = db['users'].find_one({'_id': user_oid})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get all user's predictions
+        user_predictions = list(db['predictions'].find({'user_id': user_oid}).sort('created_at', -1))
+        total_user_predictions = len(user_predictions)
+        
+        # Get year prediction summary (assuming current year 2026)
+        from datetime import datetime, timedelta
+        current_year = datetime.utcnow().year
+        year_start = datetime(current_year, 1, 1)
+        
+        year_predictions = [p for p in user_predictions if p.get('created_at') and p['created_at'] >= year_start]
+        
+        # Calculate personal yield statistics
+        user_yield_predictions = [p for p in year_predictions if p.get('prediction_type') == 'yield']
+        avg_user_yield = 0
+        if user_yield_predictions:
+            yields = [float(p.get('output_data', {}).get('yield', 0)) for p in user_yield_predictions if p.get('output_data', {}).get('yield')]
+            avg_user_yield = sum(yields) / len(yields) if yields else 0
+        
+        # Calculate personal crop recommendations
+        user_crop_predictions = [p for p in year_predictions if p.get('prediction_type') == 'crop']
+        crop_recommendations = {}
+        for p in user_crop_predictions:
+            crop = p.get('output_data', {}).get('crop')
+            if crop:
+                crop_recommendations[crop] = crop_recommendations.get(crop, 0) + 1
+        
+        # Get top recommended crop
+        top_crop = max(crop_recommendations, key=crop_recommendations.get) if crop_recommendations else 'N/A'
+        
+        # Calculate personal risk analysis
+        user_risk_predictions = [p for p in year_predictions if p.get('prediction_type') == 'risk']
+        risk_distribution = {}
+        for p in user_risk_predictions:
+            risk = p.get('output_data', {}).get('risk_level')
+            if risk:
+                risk_distribution[risk] = risk_distribution.get(risk, 0) + 1
+        
+        # Calculate personal success rate
+        success_count = 0
+        for p in year_predictions:
+            confidence = p.get('output_data', {}).get('confidence', 0)
+            if isinstance(confidence, (int, float)) and confidence >= 0.70:
+                success_count += 1
+        personal_success_rate = (success_count / len(year_predictions)) * 100 if year_predictions else 0
+        
+        # Get recent predictions (last 10)
+        recent_predictions = [prediction_to_dict(p) for p in user_predictions[:10]]
+        
+        return jsonify({
+            'type': 'personal',
+            'user': {
+                'name': user.get('name'),
+                'email': user.get('email'),
+                'created_at': user.get('created_at').isoformat() if user.get('created_at') else None
+            },
+            'year_summary': {
+                'year': current_year,
+                'total_predictions': len(year_predictions),
+                'yield_predictions': len(user_yield_predictions),
+                'crop_predictions': len(user_crop_predictions),
+                'risk_predictions': len(user_risk_predictions)
+            },
+            'statistics': {
+                'avg_yield': round(avg_user_yield, 2),
+                'top_crop': top_crop,
+                'crop_count': len(crop_recommendations),
+                'success_rate': round(personal_success_rate, 1),
+                'total_predictions_all_time': total_user_predictions
+            },
+            'risk_distribution': risk_distribution,
+            'crop_recommendations': crop_recommendations,
+            'recent_predictions': recent_predictions
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/save-detailed-prediction', methods=['POST'])
+@jwt_required()
+def save_detailed_prediction():
+    """Save detailed prediction with location, land area, season, etc."""
+    try:
+        from flask_jwt_extended import get_jwt_identity
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Create detailed prediction record
+        prediction_doc = {
+            'user_id': ObjectId(user_id),
+            'prediction_type': 'yield_detailed',
+            'crop_type': data.get('cropType'),
+            'season': data.get('season'),
+            'location': data.get('location'),
+            'region': data.get('region'),
+            'land_area': data.get('landArea'),
+            'land_area_unit': data.get('landAreaUnit'),
+            'soil_parameters': {
+                'ph': data.get('soilPH'),
+                'nitrogen': data.get('nitrogen'),
+                'phosphorus': data.get('phosphorus'),
+                'potassium': data.get('potassium'),
+                'moisture': data.get('soilMoisture')
+            },
+            'weather_parameters': {
+                'temperature': data.get('temperature'),
+                'humidity': data.get('humidity'),
+                'rainfall': data.get('rainfall')
+            },
+            'prediction_result': data.get('result', {}),
+            'created_at': datetime.utcnow()
+        }
+        
+        result = db['predictions'].insert_one(prediction_doc)
+        
+        # Update user stats
+        db['users'].update_one(
+            {'_id': ObjectId(user_id)},
+            {
+                '$inc': {'total_predictions': 1},
+                '$addToSet': {
+                    'crops': data.get('cropType'),
+                    'regions': data.get('region')
+                }
+            }
+        )
+        
+        return jsonify({
+            'success': True,
+            'prediction_id': str(result.inserted_id),
+            'message': 'Detailed prediction saved successfully'
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/predictions/filters', methods=['GET'])
+@jwt_required()
+def get_predictions_with_filters():
+    """Get predictions with advanced filtering (crop, date range, season, location, revenue)"""
+    try:
+        from flask_jwt_extended import get_jwt_identity
+        user_id = get_jwt_identity()
+        
+        # Get filter parameters
+        crop = request.args.get('crop')
+        season = request.args.get('season')
+        location = request.args.get('location')
+        region = request.args.get('region')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        min_revenue = request.args.get('min_revenue', type=float)
+        max_revenue = request.args.get('max_revenue', type=float)
+        
+        # Build base query for user
+        query = {'user_id': ObjectId(user_id)}
+        
+        # Add date range filter if specified
+        if start_date or end_date:
+            date_query = {}
+            if start_date:
+                date_query['$gte'] = datetime.fromisoformat(start_date)
+            if end_date:
+                date_query['$lte'] = datetime.fromisoformat(end_date)
+            query['created_at'] = date_query
+        
+        # Get all predictions for the user
+        all_predictions = list(db['predictions'].find(query).sort('created_at', -1))
+        
+        # Format and filter predictions
+        formatted = []
+        for pred in all_predictions:
+            prediction_type = pred.get('prediction_type', '')
+            
+            # Handle detailed predictions (from EnhancedPredictionForm)
+            if prediction_type == 'yield_detailed':
+                crop_type = pred.get('crop_type', 'Unknown')
+                pred_season = pred.get('season', 'Unknown')
+                pred_location = pred.get('location', 'Unknown')
+                pred_region = pred.get('region', 'Unknown')
+                land_area = pred.get('land_area', 0)
+                land_area_unit = pred.get('land_area_unit', 'acres')
+                pred_yield = pred.get('prediction_result', {}).get('yield', 0)
+                pred_revenue = pred.get('prediction_result', {}).get('revenue', 0)
+                pred_confidence = pred.get('prediction_result', {}).get('confidence', 0)
+            
+            # Handle basic predictions (from YieldPrediction, CropRecommendation, etc)
+            else:
+                crop_type = pred.get('crop_type', 'Mixed')
+                pred_season = pred.get('season', 'All Seasons')
+                pred_location = pred.get('location', 'Various Locations')
+                pred_region = pred.get('region', 'Multiple Regions')
+                land_area = 1
+                land_area_unit = 'acre'
+                
+                # Extract yield from different possible locations
+                if 'output_data' in pred:
+                    pred_yield = pred['output_data'].get('yield', 0)
+                    pred_confidence = pred['output_data'].get('confidence', 0)
+                    # Estimate revenue (₹20 per kg average)
+                    pred_revenue = pred_yield * 20
+                else:
+                    pred_yield = pred.get('prediction_result', {}).get('yield', 0)
+                    pred_revenue = pred.get('prediction_result', {}).get('revenue', 0)
+                    pred_confidence = pred.get('prediction_result', {}).get('confidence', 0)
+            
+            # Apply filters
+            if crop and crop != crop_type:
+                continue
+            if season and season != pred_season:
+                continue
+            if location and location.lower() not in pred_location.lower():
+                continue
+            if region and region != pred_region:
+                continue
+            if min_revenue and pred_revenue < min_revenue:
+                continue
+            if max_revenue and pred_revenue > max_revenue:
+                continue
+            
+            formatted.append({
+                'id': str(pred['_id']),
+                'crop_type': crop_type,
+                'season': pred_season,
+                'location': pred_location,
+                'region': pred_region,
+                'land_area': land_area,
+                'land_area_unit': land_area_unit,
+                'yield': pred_yield,
+                'revenue': pred_revenue,
+                'confidence': pred_confidence,
+                'date': pred['created_at'].isoformat(),
+                'formatted_date': pred['created_at'].strftime('%B %d, %Y')
+            })
+        
+        return jsonify({
+            'count': len(formatted),
+            'predictions': formatted
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
+# PREDICTION HISTORY & ANALYTICS
+# ============================================
+
+@app.route('/api/profile/predictions', methods=['GET'])
+@jwt_required()
+def get_user_predictions():
+    """Get user's prediction history with dates"""
+    try:
+        from flask_jwt_extended import get_jwt_identity
+        user_id = get_jwt_identity()
+        
+        # Get pagination parameters
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        prediction_type = request.args.get('type', 'all')  # all, yield, crop, risk
+        
+        # Build query
+        query = {'user_id': ObjectId(user_id)}
+        if prediction_type != 'all':
+            query['prediction_type'] = prediction_type
+        
+        # Get total count
+        total_count = db['predictions'].count_documents(query)
+        
+        # Get predictions with pagination
+        predictions = list(db['predictions'].find(query)
+                          .sort('created_at', -1)
+                          .skip((page - 1) * limit)
+                          .limit(limit))
+        
+        # Format predictions
+        formatted_predictions = []
+        for pred in predictions:
+            formatted_predictions.append({
+                'id': str(pred['_id']),
+                'type': pred['prediction_type'],
+                'input_data': pred['input_data'],
+                'output_data': pred['output_data'],
+                'model_type': pred.get('model_type', 'unknown'),
+                'date': pred['created_at'].isoformat(),
+                'formatted_date': pred['created_at'].strftime('%B %d, %Y at %I:%M %p')
+            })
+        
+        return jsonify({
+            'predictions': formatted_predictions,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total_count,
+                'pages': (total_count + limit - 1) // limit
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/analytics/yearly', methods=['GET'])
+@jwt_required()
+def get_yearly_analytics():
+    """Get yearly analytics for logged-in user"""
+    try:
+        from flask_jwt_extended import get_jwt_identity
+        user_id = get_jwt_identity()
+        
+        # Get year parameter (default to current year)
+        year = int(request.args.get('year', datetime.utcnow().year))
+        
+        # Get all predictions for the year
+        start_date = datetime(year, 1, 1)
+        end_date = datetime(year + 1, 1, 1)
+        
+        predictions = list(db['predictions'].find({
+            'user_id': ObjectId(user_id),
+            'created_at': {'$gte': start_date, '$lt': end_date}
+        }).sort('created_at', 1))
+        
+        # Monthly breakdown
+        monthly_data = {i: {'yield': 0, 'crop': 0, 'risk': 0, 'total': 0} for i in range(1, 13)}
+        
+        total_yield = 0
+        yield_count = 0
+        crop_distribution = {}
+        risk_distribution = {'Low': 0, 'Medium': 0, 'High': 0}
+        
+        for pred in predictions:
+            month = pred['created_at'].month
+            pred_type = pred['prediction_type']
+            monthly_data[month][pred_type] += 1
+            monthly_data[month]['total'] += 1
+            
+            if pred_type == 'yield':
+                yield_val = pred['output_data'].get('yield', 0)
+                total_yield += yield_val
+                yield_count += 1
+            elif pred_type == 'crop':
+                crop = pred['output_data'].get('crop', 'Unknown')
+                crop_distribution[crop] = crop_distribution.get(crop, 0) + 1
+            elif pred_type == 'risk':
+                risk = pred['output_data'].get('risk_level', 'Low')
+                risk_distribution[risk] = risk_distribution.get(risk, 0) + 1
+        
+        # Calculate quarterly data
+        quarterly_data = {
+            'Q1': sum(monthly_data[m]['total'] for m in [1, 2, 3]),
+            'Q2': sum(monthly_data[m]['total'] for m in [4, 5, 6]),
+            'Q3': sum(monthly_data[m]['total'] for m in [7, 8, 9]),
+            'Q4': sum(monthly_data[m]['total'] for m in [10, 11, 12])
+        }
+        
+        # Calculate estimated revenue (assuming avg price per kg)
+        avg_yield = total_yield / yield_count if yield_count > 0 else 0
+        avg_price_per_kg = 25  # Example price in currency units
+        estimated_revenue = avg_yield * avg_price_per_kg if avg_yield > 0 else 0
+        
+        return jsonify({
+            'year': year,
+            'summary': {
+                'total_predictions': len(predictions),
+                'avg_yield': round(avg_yield, 2),
+                'estimated_revenue': round(estimated_revenue, 2),
+                'currency': 'INR'
+            },
+            'monthly_breakdown': monthly_data,
+            'quarterly_breakdown': quarterly_data,
+            'crop_distribution': crop_distribution,
+            'risk_distribution': risk_distribution
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/analytics/quarterly', methods=['GET'])
+@jwt_required()
+def get_quarterly_analytics():
+    """Get quarterly analytics for logged-in user"""
+    try:
+        from flask_jwt_extended import get_jwt_identity
+        user_id = get_jwt_identity()
+        
+        year = int(request.args.get('year', datetime.utcnow().year))
+        quarter = int(request.args.get('quarter', ((datetime.utcnow().month - 1) // 3) + 1))  # 1-4
+        
+        # Determine quarter date range
+        quarter_start_month = (quarter - 1) * 3 + 1
+        start_date = datetime(year, quarter_start_month, 1)
+        
+        if quarter == 4:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, quarter_start_month + 3, 1)
+        
+        predictions = list(db['predictions'].find({
+            'user_id': ObjectId(user_id),
+            'created_at': {'$gte': start_date, '$lt': end_date}
+        }))
+        
+        # Calculate metrics
+        total_yield = 0
+        yield_count = 0
+        crops = []
+        
+        for pred in predictions:
+            if pred['prediction_type'] == 'yield':
+                yield_val = pred['output_data'].get('yield', 0)
+                total_yield += yield_val
+                yield_count += 1
+            elif pred['prediction_type'] == 'crop':
+                crops.append(pred['output_data'].get('crop', 'Unknown'))
+        
+        avg_yield = total_yield / yield_count if yield_count > 0 else 0
+        avg_price_per_kg = 25
+        revenue = avg_yield * avg_price_per_kg
+        
+        return jsonify({
+            'year': year,
+            'quarter': f'Q{quarter}',
+            'period': f'{start_date.strftime("%B %Y")} - {end_date.strftime("%B %Y")}',
+            'total_predictions': len(predictions),
+            'avg_yield': round(avg_yield, 2),
+            'revenue': round(revenue, 2),
+            'crops_recommended': list(set(crops)),
+            'currency': 'INR'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
+# JWT ERROR HANDLERS
+# ============================================
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    """Handle missing JWT token - allow continuation for optional routes"""
+    return jsonify({'error': 'Missing authorization token'}), 401
+
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    """Handle invalid JWT token - allow continuation for optional routes"""
+    return jsonify({'error': 'Invalid token'}), 401
+
+
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_data):
+    """Handle expired JWT token"""
+    return jsonify({'error': 'Token has expired'}), 401
 
 
 # ============================================
