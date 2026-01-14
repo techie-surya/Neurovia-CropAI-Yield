@@ -1,19 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { Dashboard } from './components/Dashboard';
-import { YieldPrediction } from './components/YieldPrediction';
-import { CropRecommendation } from './components/CropRecommendation';
-import { FertilizerOptimization } from './components/FertilizerOptimization';
-import { RiskPrediction } from './components/RiskPrediction';
-import { WhatIfSimulator } from './components/WhatIfSimulator';
-import { ExplainableAI } from './components/ExplainableAI';
-import { Weather } from './components/Weather';
-import Profile from './components/Profile';
-import EnhancedPredictionForm from './components/EnhancedPredictionForm';
-import HistoricalRecords from './components/HistoricalRecords';
-import { useI18n } from './context/LanguageContext';
 import { AuthModal, AuthMode } from './components/AuthModal';
+import { CropRecommendation } from './components/CropRecommendation';
+import { Dashboard } from './components/Dashboard';
+import EnhancedPredictionForm from './components/EnhancedPredictionForm';
+import { ExplainableAI } from './components/ExplainableAI';
+import { FertilizerOptimization } from './components/FertilizerOptimization';
+import HistoricalRecords from './components/HistoricalRecords';
+import Profile from './components/Profile';
+import { RiskPrediction } from './components/RiskPrediction';
+import { Weather } from './components/Weather';
+import { WhatIfSimulator } from './components/WhatIfSimulator';
+import { YieldPrediction } from './components/YieldPrediction';
+import { useI18n } from './context/LanguageContext';
 import { authAPI } from './utils/api';
 
 function App() {
@@ -116,6 +115,7 @@ function App() {
     ] : [])
   ];
 
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
       {/* Global Header */}
@@ -126,7 +126,7 @@ function App() {
               <div className="text-4xl">🌾</div>
               <div>
                 <h1 className="text-2xl font-bold text-green-700">{t('appTitle')}</h1>
-                <p className="text-xs text-gray-600">{t('headerSubtitle')}</p>
+                <p className="text-xs text-gray-600">Smart Agriculture AI</p>
               </div>
             </div>
 
@@ -246,7 +246,7 @@ function App() {
         mode={authMode}
         onClose={closeAuth}
         onModeChange={openAuth}
-        onLoginSuccess={() => navigate('/')}
+        onLoginSuccess={handleLoginSuccess}
       />
     </div>
   );
