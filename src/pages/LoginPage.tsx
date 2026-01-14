@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../context/LanguageContext';
+import { authAPI } from '../utils/api';
 
 export function LoginPage() {
   const { t } = useI18n();
@@ -8,15 +9,41 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
     if (!email || !password) {
       setError(t('submit'));
       return;
     }
-    navigate('/dashboard');
+
+    setLoading(true);
+    try {
+      // Call the real authentication API
+      const result = await authAPI.login({ email, password });
+      
+      if (result.access_token) {
+        // Token is already stored by authAPI.login()
+        // Also store user data
+        if (result.user) {
+          localStorage.setItem('currentUser', JSON.stringify(result.user));
+        }
+        // Give localStorage a moment to be read, then redirect
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 100);
+      } else {
+        setError('Login failed: No token received');
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.message || 'Invalid email or password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -53,9 +80,10 @@ export function LoginPage() {
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button
           type="submit"
-          className="w-full py-2.5 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors"
+          disabled={loading}
+          className="w-full py-2.5 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          {t('login')}
+          {loading ? 'Logging in...' : t('login')}
         </button>
         <div className="text-sm text-center">
           {t('registerLink')}{' '}

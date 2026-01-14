@@ -9,6 +9,9 @@ import { RiskPrediction } from './components/RiskPrediction';
 import { WhatIfSimulator } from './components/WhatIfSimulator';
 import { ExplainableAI } from './components/ExplainableAI';
 import { Weather } from './components/Weather';
+import Profile from './components/Profile';
+import EnhancedPredictionForm from './components/EnhancedPredictionForm';
+import HistoricalRecords from './components/HistoricalRecords';
 import { useI18n } from './context/LanguageContext';
 import { AuthModal, AuthMode } from './components/AuthModal';
 import { authAPI } from './utils/api';
@@ -18,6 +21,7 @@ function App() {
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
+  const [showDemoGuide, setShowDemoGuide] = useState(true);
   const navigate = useNavigate();
 
   // Check if user is logged in on mount
@@ -62,11 +66,21 @@ function App() {
         console.log('Setting user:', user.name || user.email);
         setUserName(user.name || user.email);
         setIsLoggedIn(true);
+        
+        // Dispatch custom event to notify Dashboard
+        window.dispatchEvent(new Event('auth-changed'));
+        
+        // Wait a moment then navigate to yield page
+        setTimeout(() => {
+          navigate('/yield');
+        }, 100);
       } catch (e) {
         console.error('Parse error:', e);
+        navigate('/');
       }
+    } else {
+      navigate('/');
     }
-    navigate('/');
   };
 
   const handleLogout = async () => {
@@ -76,6 +90,10 @@ function App() {
       localStorage.removeItem('currentUser');
       setIsLoggedIn(false);
       setUserName('');
+      
+      // Dispatch custom event to notify Dashboard
+      window.dispatchEvent(new Event('auth-changed'));
+      
       navigate('/');
     } catch (err) {
       console.error('Logout failed:', err);
@@ -85,12 +103,17 @@ function App() {
   const navLinks = [
     { path: '/dashboard', label: t('dashboard') },
     { path: '/weather', label: t('weather') },
+    { path: '/predict', label: 'Predict' },
     { path: '/yield', label: t('yieldPrediction') },
     { path: '/recommendation', label: t('recommendation') },
     { path: '/optimization', label: t('optimization') },
     { path: '/risk', label: t('risk') },
     { path: '/simulator', label: t('simulator') },
-    { path: '/explainable', label: t('explainable') }
+    { path: '/explainable', label: t('explainable') },
+    ...(isLoggedIn ? [
+      { path: '/records', label: 'Records' },
+      { path: '/profile', label: 'Profile' }
+    ] : [])
   ];
 
   return (
@@ -179,97 +202,44 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/weather" element={<Weather />} />
+          <Route path="/predict" element={<EnhancedPredictionForm />} />
           <Route path="/yield" element={<YieldPrediction />} />
           <Route path="/recommendation" element={<CropRecommendation />} />
           <Route path="/optimization" element={<FertilizerOptimization />} />
           <Route path="/risk" element={<RiskPrediction />} />
           <Route path="/simulator" element={<WhatIfSimulator />} />
           <Route path="/explainable" element={<ExplainableAI />} />
+          <Route path="/records" element={<HistoricalRecords />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid md:grid-cols-4 gap-8">
-            {/* About */}
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-3">About AgroAI Platform</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                AI-powered platform helping farmers predict crop yields, optimize resources, 
-                and make data-driven decisions before cultivation.
-              </p>
-            </div>
-
-            {/* Key Features */}
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-3">Key Features</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>✓ Yield Prediction with ML</li>
-                <li>✓ Smart Crop Recommendation</li>
-                <li>✓ Resource Optimization</li>
-                <li>✓ Risk Assessment</li>
-              </ul>
-            </div>
-
-            {/* Technology */}
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-3">Technology Stack</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>🧠 Random Forest & XGBoost</li>
-                <li>⚛️ React + TypeScript</li>
-                <li>📊 Recharts Visualization</li>
-                <li>🎨 Tailwind CSS</li>
-              </ul>
-            </div>
-
-            {/* Target Users */}
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-3">Target Users</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>👨‍🌾 Farmers</li>
-                <li>🏛️ Agriculture Officers</li>
-                <li>📋 Policymakers</li>
-                <li>🌾 Agri-businesses</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <p className="text-sm text-gray-600">
-                © 2026 AgroAI Platform - National AI Hackathon Project
-              </p>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium">
-                  🏆 Hackathon Ready
-                </span>
-                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-medium">
-                  🚀 Demo Complete
-                </span>
+      {/* Demo Helper - Floating Button */}
+      {showDemoGuide && (
+        <div className="fixed bottom-8 right-8 z-40">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-4 rounded-lg shadow-2xl max-w-xs relative">
+            <button
+              onClick={() => setShowDemoGuide(false)}
+              className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold shadow-lg transition-colors"
+              aria-label="Close demo guide"
+            >
+              ✕
+            </button>
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">💡</div>
+              <div>
+                <h4 className="font-semibold mb-1 text-sm">Quick Demo Guide</h4>
+                <p className="text-xs opacity-90">
+                  1. Start with Dashboard overview<br />
+                  2. Try Yield Prediction<br />
+                  3. Test What-If Simulator<br />
+                  4. Show Explainable AI for trust
+                </p>
               </div>
             </div>
           </div>
         </div>
-      </footer>
-
-      {/* Demo Helper - Floating Button */}
-      <div className="fixed bottom-8 right-8 z-40">
-        <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-4 rounded-lg shadow-2xl max-w-xs">
-          <div className="flex items-start gap-3">
-            <div className="text-2xl">💡</div>
-            <div>
-              <h4 className="font-semibold mb-1 text-sm">Quick Demo Guide</h4>
-              <p className="text-xs opacity-90">
-                1. Start with Dashboard overview<br />
-                2. Try Yield Prediction<br />
-                3. Test What-If Simulator<br />
-                4. Show Explainable AI for trust
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       <AuthModal
         open={!!authMode}

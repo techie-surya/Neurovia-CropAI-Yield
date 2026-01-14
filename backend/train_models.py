@@ -259,50 +259,99 @@ class CropRecommender:
 
 
 class RiskPredictor:
-    """Train and save disease risk prediction model"""
+    """Train and save enhanced disease/weather risk prediction model"""
     
     def __init__(self):
-        self.model = RandomForestClassifier(n_estimators=100, random_state=42, max_depth=8)
+        self.model = RandomForestClassifier(n_estimators=150, random_state=42, max_depth=12, min_samples_split=5)
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
-        self.feature_names = ['temperature', 'humidity', 'rainfall', 'crop_age', 'soil_moisture']
+        # Enhanced feature set for comprehensive risk assessment
+        self.feature_names = [
+            'temperature', 'humidity', 'rainfall', 'crop_age', 'soil_moisture',
+            'nitrogen', 'phosphorus', 'potassium', 'soil_ph', 'soil_drainage'
+        ]
         
-    def generate_training_data(self, samples=1500):
-        """Generate synthetic training data for risk prediction"""
+    def generate_training_data(self, samples=3000):
+        """Generate synthetic training data for comprehensive risk prediction"""
         np.random.seed(42)
         
         risk_data = []
         
         for _ in range(samples):
-            temperature = np.random.uniform(15, 35)
-            humidity = np.random.uniform(30, 95)
-            rainfall = np.random.uniform(0, 200)
+            temperature = np.random.uniform(10, 40)
+            humidity = np.random.uniform(20, 100)
+            rainfall = np.random.uniform(0, 250)
             crop_age = np.random.uniform(0, 150)
-            soil_moisture = np.random.uniform(20, 80)
+            soil_moisture = np.random.uniform(10, 85)
+            nitrogen = np.random.uniform(20, 150)
+            phosphorus = np.random.uniform(10, 80)
+            potassium = np.random.uniform(10, 100)
+            soil_ph = np.random.uniform(4.5, 8.5)
+            soil_drainage = np.random.uniform(20, 100)  # 20=poor, 100=excellent
             
-            # Determine risk level
+            # Determine risk level based on multiple factors
             risk_score = 0
             
-            # High humidity + high temperature = high disease risk
-            if humidity > 80 and temperature > 25:
-                risk_score += 40
+            # Weather-based risks
+            # High humidity + high temperature + moderate crop age = HIGH disease risk
+            if humidity > 85 and temperature > 28 and 30 < crop_age < 90:
+                risk_score += 35
+            elif humidity > 75 and temperature > 26:
+                risk_score += 20
+            elif humidity > 65 and temperature > 30:
+                risk_score += 15
             
-            # High rainfall = high risk
-            if rainfall > 100:
+            # Rainfall extremes (drought or flood)
+            if rainfall < 30:  # Drought risk
+                risk_score += 25
+                if nitrogen < 50:  # Poor nutrients worsen drought
+                    risk_score += 10
+            elif rainfall > 180:  # Flood risk
                 risk_score += 30
+                if soil_drainage < 50:  # Poor drainage worsens flood
+                    risk_score += 15
             
-            # Critical crop age (flowering) = high risk
-            if 40 < crop_age < 60:
+            # Nutrient deficiencies increase vulnerability
+            if nitrogen < 40:
+                risk_score += 15
+            if potassium < 30:  # K is critical for stress tolerance
+                risk_score += 20
+            if phosphorus < 25:
+                risk_score += 10
+            
+            # Soil pH extremes
+            if soil_ph < 5.0 or soil_ph > 8.2:
+                risk_score += 15
+            elif soil_ph < 5.5 or soil_ph > 7.8:
+                risk_score += 8
+            
+            # Poor soil conditions
+            if soil_moisture < 20:
+                risk_score += 15
+            elif soil_moisture > 80:
+                risk_score += 12
+            
+            if soil_drainage < 40:
                 risk_score += 20
             
-            # Add randomness
-            risk_score += np.random.normal(0, 10)
+            # Critical crop growth stages are more vulnerable
+            if 40 < crop_age < 70:  # Flowering stage
+                risk_score += 15
+            elif 70 < crop_age < 110:  # Fruit/grain development
+                risk_score += 10
+            
+            # Environmental stress combinations
+            if temperature > 35 and humidity < 40:  # Heat + dry = severe stress
+                risk_score += 20
+            
+            # Add realistic noise
+            risk_score += np.random.normal(0, 8)
             risk_score = np.clip(risk_score, 0, 100)
             
-            # Categorize risk
-            if risk_score > 70:
+            # Categorize risk with better distribution
+            if risk_score > 75:
                 risk_level = 'high'
-            elif risk_score > 40:
+            elif risk_score > 45:
                 risk_level = 'medium'
             else:
                 risk_level = 'low'
@@ -313,6 +362,11 @@ class RiskPredictor:
                 'rainfall': rainfall,
                 'crop_age': crop_age,
                 'soil_moisture': soil_moisture,
+                'nitrogen': nitrogen,
+                'phosphorus': phosphorus,
+                'potassium': potassium,
+                'soil_ph': soil_ph,
+                'soil_drainage': soil_drainage,
                 'risk_level': risk_level,
                 'risk_score': risk_score
             })
@@ -321,13 +375,13 @@ class RiskPredictor:
         return df
     
     def train(self):
-        """Train the risk prediction model"""
+        """Train the enhanced risk prediction model"""
         print("\n" + "=" * 50)
-        print("DISEASE RISK PREDICTION MODEL TRAINING")
+        print("ENHANCED RISK PREDICTION MODEL TRAINING")
         print("=" * 50)
         
-        # Generate training data
-        df = self.generate_training_data(samples=2000)
+        # Generate training data with expanded feature set
+        df = self.generate_training_data(samples=3000)
         print(f"Generated {len(df)} training samples")
         print(f"Risk distribution:\n{df['risk_level'].value_counts()}\n")
         
@@ -341,16 +395,16 @@ class RiskPredictor:
         # Encode target
         y_encoded = self.label_encoder.fit_transform(y)
         
-        # Train-test split
+        # Train-test split with stratification for balanced evaluation
         X_train, X_test, y_train, y_test = train_test_split(
-            X_scaled, y_encoded, test_size=0.2, random_state=42
+            X_scaled, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
         )
         
         print(f"Training set: {len(X_train)} samples")
         print(f"Test set: {len(X_test)} samples\n")
         
         # Train model
-        print("Training Random Forest Classifier...")
+        print("Training Enhanced Random Forest Classifier...")
         self.model.fit(X_train, y_train)
         
         # Predictions
@@ -368,6 +422,7 @@ class RiskPredictor:
         # Cross-validation
         cv_scores = cross_val_score(
             self.model, X_scaled, y_encoded, cv=5,
+
             scoring='accuracy'
         )
         print(f"  Cross-val Accuracy (mean ± std): {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")

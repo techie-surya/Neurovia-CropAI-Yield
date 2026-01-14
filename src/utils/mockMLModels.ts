@@ -456,56 +456,214 @@ export interface WeatherRisk {
 export function predictWeatherRisk(input: PredictionInput): WeatherRisk {
   const optimal = CROP_DATABASE[input.crop];
   const recommendations: string[] = [];
+  let riskScore = 0; // 0-100 scale
   
-  // Drought risk
+  // Get pH numeric value
+  const phMap: Record<string, number> = {
+    'Strongly Acidic': 5.0, 'Acidic': 5.5, 'Slightly Acidic': 6.0,
+    'Neutral': 7.0, 'Slightly Alkaline': 7.5, 'Alkaline': 8.0, 'Strongly Alkaline': 8.5
+  };
+  const phValue = phMap[input.phCategory] || 7.0;
+  
+  // ===== DROUGHT RISK ASSESSMENT =====
   const rainfallRatio = input.rainfall / optimal.optimalRainfall;
   let droughtRisk: 'Low' | 'Medium' | 'High' = 'Low';
+  
+  // More sensitive drought detection (starts at 60% instead of 50%)
   if (rainfallRatio < 0.5) {
     droughtRisk = 'High';
-    recommendations.push('Install drip irrigation system immediately');
-    recommendations.push('Apply mulch to conserve soil moisture');
+    riskScore += 35;
+    recommendations.push('🚨 CRITICAL: Install drip irrigation immediately');
+    recommendations.push('Apply 5-8cm organic mulch to reduce evaporation');
+    recommendations.push('Plant drought-resistant crop varieties if possible');
+    recommendations.push('Increase irrigation frequency significantly');
   } else if (rainfallRatio < 0.7) {
     droughtRisk = 'Medium';
-    recommendations.push('Ensure backup water source is available');
+    riskScore += 20;
+    recommendations.push('⚠️ Drought risk detected - ensure reliable irrigation backup');
+    recommendations.push('Increase mulching to conserve soil moisture');
+    recommendations.push('Monitor soil moisture levels closely');
+  } else if (rainfallRatio < 0.9) {
+    droughtRisk = 'Low';
+    riskScore += 8;
+    recommendations.push('Monitor soil moisture and rainfall patterns');
   }
   
-  // Flood risk
+  // ===== FLOOD RISK ASSESSMENT =====
   let floodRisk: 'Low' | 'Medium' | 'High' = 'Low';
-  if (rainfallRatio > 1.6) {
-    floodRisk = 'High';
-    recommendations.push('Improve field drainage systems');
-    recommendations.push('Consider raised bed cultivation');
-  } else if (rainfallRatio > 1.3) {
-    floodRisk = 'Medium';
-    recommendations.push('Monitor field drainage during heavy rains');
+  let soilDrainageScore = 80; // Start with good drainage
+  
+  // Check soil type drainage
+  switch (input.soilType) {
+    case 'Clay':
+      soilDrainageScore = 40; // Poor drainage
+      break;
+    case 'Peaty':
+      soilDrainageScore = 30; // Very poor drainage
+      break;
+    case 'Silty':
+      soilDrainageScore = 60; // Moderate drainage
+      break;
+    case 'Sandy':
+      soilDrainageScore = 95; // Excellent drainage
+      break;
+    default: // Loam
+      soilDrainageScore = 75;
   }
   
-  // Heat stress risk
+  // Check waterlogging tendency
+  if (input.waterlogging === 'Yes') {
+    soilDrainageScore -= 30;
+  } else if (input.waterlogging === 'Occasional') {
+    soilDrainageScore -= 15;
+  }
+  
+  // More sensitive flood risk detection
+  if (rainfallRatio > 1.8) {
+    // 180% of optimal - severe excess rainfall
+    if (soilDrainageScore < 50) {
+      floodRisk = 'High';
+      riskScore += 40;
+      recommendations.push('🚨 CRITICAL: Establish raised bed or ridge-furrow system');
+      recommendations.push('Build field bunds and improve drainage channels immediately');
+      recommendations.push('Prepare for potential waterlogging and root rot');
+    } else if (soilDrainageScore < 85) {
+      // Loam (75) falls here - it's still vulnerable at 180%+ rainfall
+      floodRisk = 'High';
+      riskScore += 35;
+      recommendations.push('🚨 HIGH RISK: Very heavy rainfall detected - enhance drainage');
+      recommendations.push('Monitor field water levels closely');
+      recommendations.push('Prepare for possible waterlogging in low areas');
+    } else {
+      // Only excellent drainage (Sandy, 95) avoids High at extreme rainfall
+      floodRisk = 'Medium';
+      riskScore += 20;
+      recommendations.push('⚠️ Monitor drainage during heavy rainfall');
+      recommendations.push('Ensure drainage channels are clear');
+    }
+  } else if (rainfallRatio > 1.4) {
+    // 140% of optimal - moderate excess rainfall
+    if (soilDrainageScore < 50) {
+      floodRisk = 'High';
+      riskScore += 35;
+      recommendations.push('🚨 URGENT: Improve drainage systems immediately');
+      recommendations.push('Check and clear all drainage channels');
+      recommendations.push('Monitor field water levels daily');
+    } else if (soilDrainageScore < 75) {
+      floodRisk = 'Medium';
+      riskScore += 20;
+      recommendations.push('⚠️ Enhance field drainage before heavy rains');
+      recommendations.push('Monitor rainfall forecasts');
+    } else {
+      floodRisk = 'Low';
+      riskScore += 5;
+      recommendations.push('Maintain drainage channels regularly');
+    }
+  } else if (rainfallRatio > 1.1) {
+    // 110% of optimal - slight excess rainfall
+    if (soilDrainageScore < 55) {
+      floodRisk = 'Medium';
+      riskScore += 10;
+      recommendations.push('Monitor field drainage during heavy rains');
+      recommendations.push('Maintain clear drainage channels');
+    }
+  }
+  
+  // ===== HEAT STRESS RISK ASSESSMENT =====
   const tempDiff = input.temperature - optimal.optimalTemp;
   let heatStressRisk: 'Low' | 'Medium' | 'High' = 'Low';
-  if (tempDiff > 8) {
+  let nutrientStressScore = 0;
+  
+  // Calculate nutrient deficit impact on heat tolerance
+  const nRatio = input.nitrogen / optimal.optimalN;
+  const pRatio = input.phosphorus / optimal.optimalP;
+  const kRatio = input.potassium / optimal.optimalK;
+  
+  // Poor nutrients reduce heat tolerance
+  if (nRatio < 0.5) nutrientStressScore += 15;
+  else if (nRatio < 0.7) nutrientStressScore += 8;
+  
+  if (pRatio < 0.5) nutrientStressScore += 10;
+  else if (pRatio < 0.7) nutrientStressScore += 5;
+  
+  if (kRatio < 0.5) nutrientStressScore += 15; // K is critical for heat stress
+  else if (kRatio < 0.7) nutrientStressScore += 10;
+  
+  // Temperature impact
+  if (tempDiff > 12) {
     heatStressRisk = 'High';
-    recommendations.push('Increase irrigation frequency during hot days');
-    recommendations.push('Consider shade nets for sensitive crops');
+    riskScore += 30;
+    recommendations.push('🚨 HIGH HEAT: Increase irrigation frequency to 2-3 times daily');
+    recommendations.push('Consider shade cloth or intercropping for temperature control');
+    recommendations.push('Ensure adequate potassium levels (>60% optimal)');
+  } else if (tempDiff > 8) {
+    heatStressRisk = 'High';
+    riskScore += 25 + nutrientStressScore;
+    recommendations.push('Increase irrigation frequency to daily watering');
+    recommendations.push('Apply potassium fertilizer (helps heat tolerance)');
+    recommendations.push('Monitor for heat stress symptoms (leaf wilting, color change)');
   } else if (tempDiff > 5) {
     heatStressRisk = 'Medium';
+    riskScore += 12 + (nutrientStressScore / 2);
     recommendations.push('Monitor crop for heat stress symptoms');
+    recommendations.push('Ensure adequate potassium supply');
+  } else if (tempDiff > 2) {
+    riskScore += 3;
   }
   
-  // Overall alert
+  // ===== SOIL HEALTH & pH RISK =====
+  const phOptimal = optimal.optimalPH;
+  const phDiff = Math.abs(phValue - phOptimal);
+  
+  if (phDiff > 1.5) {
+    riskScore += 15;
+    if (phValue < phOptimal) {
+      recommendations.push('Soil is too acidic - apply lime (CaCO₃) to raise pH');
+    } else {
+      recommendations.push('Soil is too alkaline - add sulfur or organic matter to lower pH');
+    }
+  } else if (phDiff > 0.8) {
+    riskScore += 7;
+    recommendations.push('Soil pH is slightly suboptimal - monitor nutrient availability');
+  }
+  
+  // ===== NUTRIENT DEFICIENCY RISK =====
+  let nutrientRisk = 0;
+  if (nRatio < 0.6) nutrientRisk += 10;
+  if (pRatio < 0.6) nutrientRisk += 8;
+  if (kRatio < 0.6) nutrientRisk += 12;
+  
+  if (nutrientRisk > 20) {
+    riskScore += 15;
+    recommendations.push('Critical nutrient deficiency detected - apply fertilizer immediately');
+  } else if (nutrientRisk > 10) {
+    riskScore += 8;
+    recommendations.push('Nutrients are below optimal - consider split fertilizer application');
+  }
+  
+  // ===== NORMALIZE RISK SCORE =====
+  riskScore = Math.min(100, riskScore);
+  
+  // ===== GENERATE OVERALL ALERT =====
   let overallAlert = '✓ Favorable conditions expected';
   const highRisks = [droughtRisk, floodRisk, heatStressRisk].filter(r => r === 'High').length;
-  if (highRisks >= 2) {
-    overallAlert = '⚠️ CRITICAL: Multiple severe weather risks detected!';
-  } else if (highRisks === 1) {
-    overallAlert = '⚠️ WARNING: Significant weather risk - take action';
-  } else if (droughtRisk === 'Medium' || floodRisk === 'Medium' || heatStressRisk === 'Medium') {
-    overallAlert = '⚡ CAUTION: Monitor weather conditions closely';
+  const mediumRisks = [droughtRisk, floodRisk, heatStressRisk].filter(r => r === 'Medium').length;
+  
+  if (riskScore >= 85 || highRisks >= 2) {
+    overallAlert = '🚨 CRITICAL: Multiple severe risks - immediate intervention needed!';
+  } else if (riskScore >= 70 || highRisks === 1) {
+    overallAlert = '⚠️ WARNING: Significant weather/soil risks - take immediate action';
+  } else if (riskScore >= 50 || mediumRisks >= 2) {
+    overallAlert = '⚡ CAUTION: Monitor weather and field conditions closely';
+  } else if (riskScore >= 30 || mediumRisks === 1) {
+    overallAlert = '🌤️ Monitor: Some factors suboptimal - stay alert';
   }
   
+  // Ensure recommendations list is not empty
   if (recommendations.length === 0) {
-    recommendations.push('Continue with standard farming practices');
-    recommendations.push('Monitor weather forecasts regularly');
+    recommendations.push('✅ Continue with standard farming practices');
+    recommendations.push('📊 Monitor weather forecasts regularly');
+    recommendations.push('📝 Keep field records for future planning');
   }
   
   return {

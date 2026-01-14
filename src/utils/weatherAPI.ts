@@ -4,7 +4,7 @@
  * Get your API key from: https://openweathermap.org/api
  */
 
-const WEATHER_API_KEY = '0631ebab3ea49ee94c131059261201'; // <-- Replace with your key
+const WEATHER_API_KEY = 'babf0f4e684e15176c2fc62d0a394fac'; // OpenWeatherMap API Key
 const WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5";
 
 /* -------------------------------------------------------------------------- */

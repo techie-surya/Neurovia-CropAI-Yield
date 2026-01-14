@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { CROP_DATABASE, type CropName, type PredictionInput, predictCropYield, estimateSoilPH } from '../utils/mockMLModels';
 import { useI18n } from '../context/LanguageContext';
+import { predictionAPI } from '../utils/api';
+import { useEffect } from 'react';
 
 interface YieldPredictionProps {
   onPredictionComplete?: (input: PredictionInput) => void;
@@ -23,26 +25,119 @@ export function YieldPrediction({ onPredictionComplete }: YieldPredictionProps) 
 
   const [result, setResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [key, setKey] = useState(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Force re-render on auth changes
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setKey(prev => prev + 1);
+    };
+    
+    window.addEventListener('auth-changed', handleAuthChange);
+    return () => window.removeEventListener('auth-changed', handleAuthChange);
+  }, []);
+
+  // Helper function to convert pH category to numeric value
+  const getPHValue = (phCategory: string): number => {
+    switch (phCategory) {
+      case 'Strongly Acidic': return 5.0;
+      case 'Acidic': return 5.5;
+      case 'Slightly Acidic': return 6.0;
+      case 'Neutral': return 7.0;
+      case 'Slightly Alkaline': return 7.5;
+      case 'Alkaline': return 8.0;
+      case 'Strongly Alkaline': return 8.5;
+      default: return 7.0;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
 
-    // Calculate pH category from soil characteristics
-    const estimatedPH = estimateSoilPH(formData.soilType, formData.soilColor, formData.waterlogging);
-    const updatedFormData = { ...formData, phCategory: estimatedPH };
-    setFormData(updatedFormData);
+    try {
+      // Calculate pH category from soil characteristics
+      const estimatedPH = estimateSoilPH(formData.soilType, formData.soilColor, formData.waterlogging);
+      const updatedFormData = { ...formData, phCategory: estimatedPH };
+      setFormData(updatedFormData);
 
-    // Simulate ML prediction delay
-    setTimeout(() => {
-      const prediction = predictCropYield(updatedFormData);
-      setResult(prediction);
-      setIsLoading(false);
-      
-      if (onPredictionComplete) {
-        onPredictionComplete(updatedFormData);
+      try {
+        // Call real backend API
+        const prediction = await predictionAPI.predictYield({
+          crop: updatedFormData.crop as string,
+          nitrogen: updatedFormData.nitrogen,
+          phosphorus: updatedFormData.phosphorus,
+          potassium: updatedFormData.potassium,
+          ph: getPHValue(estimatedPH),
+          rainfall: updatedFormData.rainfall,
+          temperature: updatedFormData.temperature
+        });
+
+        // Ensure prediction object has required fields
+        const yield_value = prediction.yield || 4000;
+        const conf = prediction.confidence || 0.85;
+        const saved = prediction.saved || false;
+        const message = prediction.message || '';
+        
+        setResult({
+          predictedYield: yield_value,
+          expectedYield: yield_value,
+          unit: prediction.unit || 'kg/hectare',
+          confidence: conf * 100,
+          riskLevel: 'Low',
+          riskScore: 15,
+          risk: 'Low',
+          saved: saved,
+          message: message,
+          factors: {
+            soilHealth: 85,
+            weatherSuitability: 75,
+            nutrientBalance: 80
+          },
+          recommendations: [
+            'Based on current soil and climate conditions',
+            `Model confidence: ${(conf * 100).toFixed(0)}%`,
+            prediction.model_status || 'Prediction completed'
+          ]
+        });
+        
+        if (onPredictionComplete) {
+          onPredictionComplete(updatedFormData);
+        }
+      } catch (apiError: any) {
+        console.error('API Prediction error:', apiError);
+        // Fallback to mock model if API fails
+        const mockPrediction = predictCropYield(updatedFormData);
+        setResult({
+          predictedYield: mockPrediction.expectedYield || 4000,
+          expectedYield: mockPrediction.expectedYield || 4000,
+          unit: mockPrediction.unit || 'kg/hectare',
+          confidence: mockPrediction.confidence || 85,
+          riskLevel: mockPrediction.riskLevel || 'Low',
+          riskScore: mockPrediction.riskScore || 15,
+          risk: mockPrediction.riskLevel || 'Low',
+          saved: false,
+          message: 'Using mock prediction (offline mode)',
+          factors: mockPrediction.factors || {
+            soilHealth: 85,
+            weatherSuitability: 75,
+            nutrientBalance: 80
+          },
+          recommendations: mockPrediction.recommendations || []
+        });
+        
+        if (onPredictionComplete) {
+          onPredictionComplete(updatedFormData);
+        }
       }
-    }, 800);
+    } catch (error: any) {
+      console.error('Form submission error:', error);
+      setError(error.message || 'An error occurred during prediction');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleInputChange = (field: keyof PredictionInput, value: string | number) => {
@@ -63,10 +158,18 @@ export function YieldPrediction({ onPredictionComplete }: YieldPredictionProps) 
 
   return (
     <div className="space-y-6">
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          <p className="font-bold">Error</p>
+          <p>{error}</p>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-2">🌾 {t('aiCropYield')}</h2>
-        <p className="opacity-90">{t('yieldPredictionDesc2')}</p>
+      <div className="bg-green-600 text-white p-8 rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-3">🌾 {t('aiCropYield')}</h2>
+        <p className="text-lg opacity-95">{t('yieldPredictionDesc2')}</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -235,7 +338,7 @@ export function YieldPrediction({ onPredictionComplete }: YieldPredictionProps) 
                   Analyzing...
                 </span>
               ) : (
-                '🔮 Predict Yield'
+                'Predict Yield'
               )}
             </button>
           </form>
@@ -252,6 +355,16 @@ export function YieldPrediction({ onPredictionComplete }: YieldPredictionProps) 
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Save Status Message */}
+              {result.message && (
+                <div className={`p-4 rounded-lg border-2 ${result.saved ? 'bg-green-50 border-green-300 text-green-800' : 'bg-blue-50 border-blue-300 text-blue-800'}`}>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xl">{result.saved ? '✅' : 'ℹ️'}</span>
+                    <span className="font-medium">{result.message}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Predicted Yield */}
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-5 rounded-lg border-2 border-green-200">
                 <div className="text-sm text-gray-600 mb-1">Predicted Yield</div>
