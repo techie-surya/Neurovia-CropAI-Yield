@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 from flask_bcrypt import Bcrypt
+from flask_compress import Compress
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from bson.objectid import ObjectId
@@ -33,6 +34,9 @@ PRODUCTION_DIR = os.path.join(MODEL_DIR, 'production')
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
+
+# Enable response compression for faster data transfer
+Compress(app)
 
 # Custom JSON encoder for ObjectId
 from flask.json.provider import DefaultJSONProvider
@@ -103,9 +107,12 @@ models = {
     'risk_label_encoder': None
 }
 
+# Track if models are loaded to avoid redundant loads
+models_loaded = False
+
 def load_models():
     """Load pre-trained ML models"""
-    global models
+    global models, models_loaded
     def resolve(path_list):
         """Return first existing path from list"""
         for p in path_list:
@@ -176,17 +183,21 @@ def load_models():
                 print(f"⚠ Failed to load risk model: {e}")
 
         # Check if any model is missing
-        models_loaded = [k for k, v in models.items() if '_model' in k and v is not None]
-        if len(models_loaded) == 0:
+        loaded_models = [k for k, v in models.items() if '_model' in k and v is not None]
+        if len(loaded_models) == 0:
             print("⚠ No ML models loaded. Using mock predictions for all endpoints.")
-        elif len(models_loaded) < 3:
-            print(f"⚠ Only {len(models_loaded)}/3 models loaded. Using mock fallback for missing models.")
+        elif len(loaded_models) < 3:
+            print(f"⚠ Only {len(loaded_models)}/3 models loaded. Using mock fallback for missing models.")
         else:
             print("✓ All ML models loaded successfully.")
+            
+        # Mark models as loaded regardless of which ones succeeded
+        models_loaded = True
             
     except Exception as e:
         print(f"⚠ Critical error in load_models: {e}")
         print("⚠ Using mock predictions as fallback.")
+        models_loaded = False
 
 # Crop mapping
 CROP_MAPPING = {
@@ -535,6 +546,12 @@ def logout():
 def predict_yield():
     """Predict crop yield - works for both guests and logged-in users"""
     try:
+        global models_loaded
+        
+        # Load models only once
+        if not models_loaded:
+            load_models()
+        
         from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
         
         # Try to verify JWT but don't fail if missing
@@ -646,6 +663,12 @@ def monitor_models():
 def predict_crop():
     """Recommend crop - works for both guests and logged-in users"""
     try:
+        global models_loaded
+        
+        # Load models only once
+        if not models_loaded:
+            load_models()
+        
         from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
         
         # Try to verify JWT but don't fail if missing
@@ -760,6 +783,12 @@ def predict_crop():
 def predict_risk():
     """Predict farming risk with enhanced features - works for both guests and logged-in users"""
     try:
+        global models_loaded
+        
+        # Load models only once
+        if not models_loaded:
+            load_models()
+        
         from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
         
         # Try to verify JWT but don't fail if missing
@@ -1018,38 +1047,44 @@ def get_dashboard_stats():
 
 
 def get_aggregate_dashboard():
-    """Get aggregate statistics for non-logged-in users"""
+    """Get aggregate statistics for non-logged-in users - OPTIMIZED with aggregation pipeline"""
     try:
-        # Get aggregate statistics from ALL users
+        # Use MongoDB aggregation pipeline instead of loading all data
+        stats_pipeline = [
+            {
+                '$facet': {
+                    'total_count': [{'$count': 'count'}],
+                    'yield_stats': [
+                        {'$match': {'prediction_type': 'yield'}},
+                        {'$group': {
+                            '_id': None,
+                            'avg_yield': {'$avg': '$output_data.yield'},
+                            'count': {'$sum': 1}
+                        }}
+                    ],
+                    'high_confidence': [
+                        {'$match': {'output_data.confidence': {'$gte': 0.70}}},
+                        {'$count': 'count'}
+                    ]
+                }
+            }
+        ]
+        
+        result = list(db['predictions'].aggregate(stats_pipeline))[0]
+        
+        # Extract results safely
+        total_predictions = result['total_count'][0]['count'] if result['total_count'] else 0
+        avg_yield = round(result['yield_stats'][0]['avg_yield'], 2) if result['yield_stats'] else 0
+        high_conf_count = result['high_confidence'][0]['count'] if result['high_confidence'] else 0
+        success_rate = (high_conf_count / total_predictions * 100) if total_predictions > 0 else 0
+        
+        # Count users (simple count is fast)
         total_farmers = db['users'].count_documents({})
-        
-        # Get ALL predictions from database (across all users)
-        all_predictions = list(db['predictions'].find({}))
-        
-        total_predictions = len(all_predictions)
-        
-        # Calculate aggregate yield statistics
-        yield_predictions = [p for p in all_predictions if p.get('prediction_type') == 'yield']
-        avg_yield = 0
-        if yield_predictions:
-            yields = [float(p.get('output_data', {}).get('yield', 0)) for p in yield_predictions if p.get('output_data', {}).get('yield')]
-            avg_yield = sum(yields) / len(yields) if yields else 0
-        
-        # Calculate aggregate success rate (predictions with confidence >= 70%)
-        success_count = 0
-        if all_predictions:
-            for p in all_predictions:
-                confidence = p.get('output_data', {}).get('confidence', 0)
-                if isinstance(confidence, (int, float)) and confidence >= 0.70:
-                    success_count += 1
-            success_rate = (success_count / len(all_predictions)) * 100
-        else:
-            success_rate = 0
         
         return jsonify({
             'type': 'aggregate',
             'total_predictions': total_predictions,
-            'avg_yield': round(avg_yield, 2),
+            'avg_yield': avg_yield,
             'success_rate': round(success_rate, 0),
             'active_farmers': total_farmers,
             'message': 'Community statistics - Log in to see your personal predictions'
@@ -1059,62 +1094,101 @@ def get_aggregate_dashboard():
 
 
 def get_personal_dashboard(user_id):
-    """Get personal dashboard statistics for logged-in users"""
+    """Get personal dashboard statistics for logged-in users - OPTIMIZED"""
     try:
         user_oid = ObjectId(user_id)
         
         # Get user info
-        user = db['users'].find_one({'_id': user_oid})
+        user = db['users'].find_one({'_id': user_oid}, {'name': 1, 'email': 1, 'created_at': 1})
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Get all user's predictions
-        user_predictions = list(db['predictions'].find({'user_id': user_oid}).sort('created_at', -1))
-        total_user_predictions = len(user_predictions)
-        
-        # Get year prediction summary (assuming current year 2026)
-        from datetime import datetime, timedelta
+        # Get year prediction summary
+        from datetime import datetime
         current_year = datetime.utcnow().year
         year_start = datetime(current_year, 1, 1)
         
-        year_predictions = [p for p in user_predictions if p.get('created_at') and p['created_at'] >= year_start]
+        # Use aggregation pipeline for all calculations
+        stats_pipeline = [
+            {'$match': {'user_id': user_oid}},
+            {
+                '$facet': {
+                    'total_all_time': [{'$count': 'count'}],
+                    'year_stats': [
+                        {'$match': {'created_at': {'$gte': year_start}}},
+                        {
+                            '$group': {
+                                '_id': '$prediction_type',
+                                'count': {'$sum': 1},
+                                'avg_yield': {
+                                    '$avg': {
+                                        '$cond': [
+                                            {'$eq': ['$prediction_type', 'yield']},
+                                            '$output_data.yield',
+                                            None
+                                        ]
+                                    }
+                                },
+                                'success_count': {
+                                    '$sum': {
+                                        '$cond': [
+                                            {'$gte': ['$output_data.confidence', 0.70]},
+                                            1,
+                                            0
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    'crop_distribution': [
+                        {'$match': {'prediction_type': 'crop', 'created_at': {'$gte': year_start}}},
+                        {'$group': {
+                            '_id': '$output_data.crop',
+                            'count': {'$sum': 1}
+                        }},
+                        {'$sort': {'count': -1}}
+                    ],
+                    'recent_10': [
+                        {'$sort': {'created_at': -1}},
+                        {'$limit': 10},
+                        {'$project': {
+                            '_id': 1,
+                            'prediction_type': 1,
+                            'output_data': 1,
+                            'created_at': 1
+                        }}
+                    ]
+                }
+            }
+        ]
         
-        # Calculate personal yield statistics
-        user_yield_predictions = [p for p in year_predictions if p.get('prediction_type') == 'yield']
-        avg_user_yield = 0
-        if user_yield_predictions:
-            yields = [float(p.get('output_data', {}).get('yield', 0)) for p in user_yield_predictions if p.get('output_data', {}).get('yield')]
-            avg_user_yield = sum(yields) / len(yields) if yields else 0
+        result = list(db['predictions'].aggregate(stats_pipeline))[0]
         
-        # Calculate personal crop recommendations
-        user_crop_predictions = [p for p in year_predictions if p.get('prediction_type') == 'crop']
-        crop_recommendations = {}
-        for p in user_crop_predictions:
-            crop = p.get('output_data', {}).get('crop')
-            if crop:
-                crop_recommendations[crop] = crop_recommendations.get(crop, 0) + 1
+        # Process results
+        total_all_time = result['total_all_time'][0]['count'] if result['total_all_time'] else 0
         
-        # Get top recommended crop
-        top_crop = max(crop_recommendations, key=crop_recommendations.get) if crop_recommendations else 'N/A'
-        
-        # Calculate personal risk analysis
-        user_risk_predictions = [p for p in year_predictions if p.get('prediction_type') == 'risk']
-        risk_distribution = {}
-        for p in user_risk_predictions:
-            risk = p.get('output_data', {}).get('risk_level')
-            if risk:
-                risk_distribution[risk] = risk_distribution.get(risk, 0) + 1
-        
-        # Calculate personal success rate
+        year_data = {}
+        total_year = 0
+        avg_yield = 0
         success_count = 0
-        for p in year_predictions:
-            confidence = p.get('output_data', {}).get('confidence', 0)
-            if isinstance(confidence, (int, float)) and confidence >= 0.70:
-                success_count += 1
-        personal_success_rate = (success_count / len(year_predictions)) * 100 if year_predictions else 0
         
-        # Get recent predictions (last 10)
-        recent_predictions = [prediction_to_dict(p) for p in user_predictions[:10]]
+        for stat in result['year_stats']:
+            pred_type = stat['_id']
+            year_data[pred_type] = stat['count']
+            total_year += stat['count']
+            if stat['avg_yield']:
+                avg_yield = stat['avg_yield']
+            success_count += stat['success_count']
+        
+        success_rate = (success_count / total_year * 100) if total_year > 0 else 0
+        
+        # Build crop recommendations dict
+        crop_recommendations = {c['_id']: c['count'] for c in result['crop_distribution']}
+        top_crop = result['crop_distribution'][0]['_id'] if result['crop_distribution'] else 'N/A'
+        
+        # Convert recent predictions
+        recent_predictions = [prediction_to_dict(p) for p in result['recent_10']]
         
         return jsonify({
             'type': 'personal',
@@ -1125,19 +1199,18 @@ def get_personal_dashboard(user_id):
             },
             'year_summary': {
                 'year': current_year,
-                'total_predictions': len(year_predictions),
-                'yield_predictions': len(user_yield_predictions),
-                'crop_predictions': len(user_crop_predictions),
-                'risk_predictions': len(user_risk_predictions)
+                'total_predictions': total_year,
+                'yield_predictions': year_data.get('yield', 0),
+                'crop_predictions': year_data.get('crop', 0),
+                'risk_predictions': year_data.get('risk', 0)
             },
             'statistics': {
-                'avg_yield': round(avg_user_yield, 2),
+                'avg_yield': round(avg_yield, 2),
                 'top_crop': top_crop,
                 'crop_count': len(crop_recommendations),
-                'success_rate': round(personal_success_rate, 1),
-                'total_predictions_all_time': total_user_predictions
+                'success_rate': round(success_rate, 1),
+                'total_predictions_all_time': total_all_time
             },
-            'risk_distribution': risk_distribution,
             'crop_recommendations': crop_recommendations,
             'recent_predictions': recent_predictions
         }), 200
