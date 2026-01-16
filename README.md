@@ -1,12 +1,17 @@
 # Neurovia - Intelligent Agricultural Recommendation System
 
 **A Hackathon Project** 🚀
+Farmers today faced poor crop yield prediction due to lack of rael time insight. The problem is 30% of crop failed due to poor planning. Farmers donot know:
+1. which crop is suitable for their soil.
+2. how much yiels to expect.
+3. what risks they faced
 
-Neurovia is an AI-powered agricultural recommendation system designed to help farmers maximize crop yields and make data-driven farming decisions. Built with modern web technologies and machine learning, this platform provides comprehensive decision support for sustainable agriculture.
+AgroAI is based on AI-powered agricultural recommendation system designed to help farmers maximize the crop yields and make data-driven farming decisions. Built with modern web technologies and machine learning, this platform provides comprehensive decision support for sustainable agriculture.
+This platform also helps in predicting historical agricultural data, weather patterns and soil health metrics. The system should provide actionable recommodation for farmers to optimize irrigation,fertilization, and pest control, tailored to specific crops and regional conditions.
 
 ## 🌟 Key Features
 
-- **🌾 Crop Recommendation** - AI-powered suggestions based on soil, climate, and location data
+- **🌾 Crop Recommendation** - AI-powered suggestions based on soil, climate, other factors and location data
 - **📊 Yield Prediction** - ML models predicting expected yields with confidence scores
 - **⚠️ Risk Assessment** - Early warning system for weather risks, disease, and drought
 - **🧪 Fertilizer Optimization** - Nutrient recommendations based on soil analysis
@@ -163,12 +168,3 @@ This is a hackathon project. Feel free to:
 - Suggest improvements
 - Submit pull requests
 - Improve documentation
-
-## 📜 License
-
-MIT License - See LICENSE file for details
-
----
-
-**Version:** 1.0.0  
-**Status:** Hackathon Ready ✨
