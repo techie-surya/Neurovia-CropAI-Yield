@@ -50,5 +50,22 @@
       "rice",
       "watermelon"
     ]
+  },
+  "risk": {
+    "accuracy": 1.0,
+    "samples": 1760,
+    "features": [
+      "nitrogen",
+      "phosphorus",
+      "potassium",
+      "temperature",
+      "ph",
+      "rainfall"
+    ],
+    "risk_classes": [
+      "high",
+      "low",
+      "medium"
+    ]
   }
 }
