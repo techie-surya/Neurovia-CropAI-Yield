@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { CROP_DATABASE, type CropName, type PredictionInput, predictCropYield, estimateSoilPH } from '../utils/mockMLModels';
 import { useI18n } from '../context/LanguageContext';
@@ -35,6 +35,29 @@ export function WhatIfSimulator() {
 
   const [hasSimulated, setHasSimulated] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+
+  // Auto-fill baseline and simulated weather from cache on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('autoWeatherCache');
+      if (!cached) return;
+      const data = JSON.parse(cached);
+      const temperature = data?.current?.temperature;
+      const rainfall = data?.current?.rainfall;
+      setBaseline(prev => ({
+        ...prev,
+        temperature: typeof temperature === 'number' ? Math.round(temperature) : prev.temperature,
+        rainfall: typeof rainfall === 'number' ? Math.round(rainfall) : prev.rainfall,
+      }));
+      setSimulated(prev => ({
+        ...prev,
+        temperature: typeof temperature === 'number' ? Math.round(temperature) : prev.temperature,
+        rainfall: typeof rainfall === 'number' ? Math.round(rainfall) : prev.rainfall,
+      }));
+    } catch (err) {
+      console.warn('WhatIfSimulator: failed to hydrate from weather cache', err);
+    }
+  }, []);
 
   const handleSimulate = () => {
     setIsSimulating(true);

@@ -23,6 +23,24 @@ export function RiskPrediction() {
   const [isLoading, setIsLoading] = useState(false);
   const [key, setKey] = useState(0);
 
+  // Auto-fill rainfall and temperature from weather cache on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('autoWeatherCache');
+      if (!cached) return;
+      const data = JSON.parse(cached);
+      const temperature = data?.current?.temperature;
+      const rainfall = data?.current?.rainfall;
+      setFormData(prev => ({
+        ...prev,
+        temperature: typeof temperature === 'number' ? Math.round(temperature) : prev.temperature,
+        rainfall: typeof rainfall === 'number' ? Math.round(rainfall) : prev.rainfall,
+      }));
+    } catch (err) {
+      console.warn('RiskPrediction: failed to hydrate from weather cache', err);
+    }
+  }, []);
+
   // Helper function to derive overall severity
   const deriveOverall = (alert: string): 'Low' | 'Medium' | 'High' => {
     const msg = (alert || '').toUpperCase();

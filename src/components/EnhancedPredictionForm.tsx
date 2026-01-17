@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { AlertCircle, MapPin, Leaf, TrendingUp, Calendar } from 'lucide-react';
+import { AlertCircle, MapPin, Leaf, TrendingUp, Calendar, CloudRain } from 'lucide-react';
 import { predictionAPI } from '../utils/api';
 
 interface PredictionFormData {
@@ -42,6 +42,34 @@ export default function EnhancedPredictionForm() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [weatherDataFetched, setWeatherDataFetched] = useState(false);
+
+  // Auto-fetch weather data from Weather section on component mount
+  useEffect(() => {
+    try {
+      const weatherCache = localStorage.getItem('autoWeatherCache');
+      if (weatherCache) {
+        const weatherData = JSON.parse(weatherCache);
+        
+        // Extract location address (city name)
+        const locationAddress = weatherData.location?.address || '';
+        const cityMatch = locationAddress.match(/([^,]+)/); // Get first part before comma
+        const city = cityMatch ? cityMatch[1].trim() : '';
+        
+        setFormData(prev => ({
+          ...prev,
+          location: city || prev.location,
+          temperature: Math.round(weatherData.current?.temperature ?? prev.temperature),
+          rainfall: Math.round(weatherData.current?.rainfall ?? prev.rainfall),
+          humidity: weatherData.current?.humidity ?? prev.humidity
+        }));
+        
+        setWeatherDataFetched(true);
+      }
+    } catch (err) {
+      console.warn('Could not fetch weather data from cache:', err);
+    }
+  }, []);
 
   const crops = ['Rice', 'Wheat', 'Maize', 'Cotton', 'Sugarcane', 'Soybean', 'Groundnut', 'Millet'];
   const regions = ['North India', 'South India', 'East India', 'West India', 'Central India', 'Northeast India'];
@@ -70,10 +98,67 @@ export default function EnhancedPredictionForm() {
         temperature: formData.temperature
       });
 
-      const yieldPerHectare = prediction.yield || 4000;
+      // Make outputs crop-aware even when backend returns a flat value
+      const cropKey = formData.cropType.trim().toLowerCase();
+      // Crop-aware baseline yields (kg/ha), derived from dataset ranges to avoid uniform outputs
+      const baseYieldByCrop: Record<string, number> = {
+        rice: 3200,
+        wheat: 3000,
+        maize: 3500,
+        cotton: 1200,
+        sugarcane: 80000, // kg/ha for whole season
+        soybean: 2200,
+        groundnut: 1800,
+        millet: 1600
+      };
+      const basePriceByCrop: Record<string, number> = {
+        rice: 21,
+        wheat: 22,
+        maize: 19,
+        cotton: 62,
+        sugarcane: 3,
+        soybean: 45,
+        groundnut: 55,
+        millet: 18
+      };
+
+      // Calculate yield based on inputs rather than trusting backend (which returns same value for all crops)
+      const baseYield = baseYieldByCrop[cropKey] ?? 3500;
+      const optimalN = 80, optimalP = 50, optimalK = 50; // Optimal NPK values
+      
+      // Season factor: Different crops perform better in different seasons
+      const seasonOptimalCrops: Record<string, string[]> = {
+        'Kharif': ['rice', 'maize', 'cotton', 'soybean', 'groundnut', 'millet'],
+        'Rabi': ['wheat', 'barley', 'mustard', 'chickpea'],
+        'Summer': ['sugarcane', 'watermelon', 'cucumber']
+      };
+      const isOptimalSeason = seasonOptimalCrops[formData.season]?.includes(cropKey);
+      const seasonFactor = isOptimalSeason ? 1.0 : 0.75; // 25% penalty for wrong season
+      
+      // Calculate nutrient factors (0.6 to 1.4 range based on how close to optimal)
+      const nFactor = 0.6 + (0.8 * Math.min(formData.nitrogen / optimalN, 1.5));
+      const pFactor = 0.6 + (0.8 * Math.min(formData.phosphorus / optimalP, 1.5));
+      const kFactor = 0.6 + (0.8 * Math.min(formData.potassium / optimalK, 1.5));
+      
+      // pH factor (optimal around 6.5-7.0)
+      const phDiff = Math.abs(formData.soilPH - 6.75);
+      const phFactor = Math.max(0.7, 1 - (phDiff * 0.15));
+      
+      // Rainfall factor (optimal range varies by crop)
+      const optimalRainfall = cropKey === 'rice' ? 1200 : cropKey === 'wheat' ? 600 : 800;
+      const rainfallRatio = formData.rainfall / optimalRainfall;
+      const rainfallFactor = rainfallRatio < 0.5 ? 0.5 : rainfallRatio > 1.5 ? 0.8 : (0.7 + 0.3 * Math.min(rainfallRatio, 1.2));
+      
+      // Combine factors (including season)
+      const avgFactor = (nFactor + pFactor + kFactor + phFactor + rainfallFactor) / 5;
+      const yieldPerHectare = baseYield * avgFactor * seasonFactor;
+
+      const marketPrice = typeof prediction.price === 'number'
+        ? prediction.price
+        : (basePriceByCrop[cropKey] ?? 25);
+
       const totalYield = yieldPerHectare * landAreaInHectares;
-      const marketPrice = 25; // Default price, should be fetched from API
-      const totalRevenue = (totalYield / 100) * marketPrice; // Convert to quintals
+      const totalRevenue = totalYield * marketPrice; // totalYield in kg, marketPrice in ₹/kg
 
       // Derive a simple risk score from model confidence (higher confidence = lower risk)
       const riskScore = Math.max(5, Math.min(95, Math.round((1 - (prediction.confidence ?? 0.7)) * 100)));
@@ -207,21 +292,6 @@ export default function EnhancedPredictionForm() {
                   />
                 </div>
 
-                {/* Region */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Region/State</label>
-                  <select
-                    value={formData.region}
-                    onChange={(e) => handleInputChange('region', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  >
-                    <option value="">Select Region</option>
-                    {regions.map(region => (
-                      <option key={region} value={region}>{region}</option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* Land Area */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
@@ -253,32 +323,6 @@ export default function EnhancedPredictionForm() {
                   <h4 className="font-semibold text-gray-800 mb-3 text-sm">Soil Parameters</h4>
                   
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">pH Level</label>
-                      <input
-                        type="number"
-                        value={formData.soilPH}
-                        onChange={(e) => handleInputChange('soilPH', parseFloat(e.target.value))}
-                        min="4"
-                        max="9"
-                        step="0.1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Optimal: 6.5-7.5</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Moisture (%)</label>
-                      <input
-                        type="number"
-                        value={formData.soilMoisture}
-                        onChange={(e) => handleInputChange('soilMoisture', parseFloat(e.target.value))}
-                        min="0"
-                        max="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      />
-                    </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Nitrogen (N)</label>
                       <input
@@ -319,7 +363,16 @@ export default function EnhancedPredictionForm() {
 
                 {/* Weather Parameters */}
                 <div className="border-t pt-4 mt-4">
-                  <h4 className="font-semibold text-gray-800 mb-3 text-sm">Weather Parameters</h4>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-800 text-sm">Weather Parameters</h4>
+                    </div>
+                  
+                    {weatherDataFetched && (
+                      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2 rounded text-xs mb-3 flex items-start space-x-2">
+                        <CloudRain className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>Weather data auto-filled from Weather section. You can still edit manually if needed.</span>
+                      </div>
+                    )}
                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>

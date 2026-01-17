@@ -16,7 +16,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }: AuthModalProps) {
   const { t } = useI18n();
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginAadhar, setLoginAadhar] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', aadhar: '', password: '', confirm: '' });
   const [forgotEmail, setForgotEmail] = useState('');
@@ -53,8 +53,8 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
     setInfo('');
 
     try {
-      if (!emailRegex.test(loginEmail)) {
-        setError(t('invalidEmail'));
+      if (!/^\d{12}$/.test(loginAadhar)) {
+        setError('Please enter a valid 12-digit Aadhar Card Number');
         return;
       }
       if (!loginPassword) {
@@ -64,7 +64,7 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
 
       // Call backend login API
       const response = await authAPI.login({
-        email: loginEmail,
+        email: loginAadhar,
         password: loginPassword,
       });
 
@@ -76,7 +76,7 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
       setInfo(t('successLogin') || 'Login successful!');
       
       // Reset form
-      setLoginEmail('');
+      setLoginAadhar('');
       setLoginPassword('');
 
       // Close modal and call success callback after a short delay
@@ -99,8 +99,11 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
         setError(t('name') + ' ' + t('required'));
         return;
       }
-      if (!emailRegex.test(registerForm.email)) {
-        setError(t('invalidEmail'));
+      // Accept either email format or mobile number (10 digits)
+      const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+      const mobileRegex = /^\d{10}$/;
+      if (!emailRegex.test(registerForm.email) && !mobileRegex.test(registerForm.email)) {
+        setError('Please enter a valid email or 10-digit mobile number');
         return;
       }
       if (!/^\d{12}$/.test(registerForm.aadhar)) {
@@ -159,12 +162,14 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
   const renderLogin = () => (
     <form onSubmit={handleLogin} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">{t('email')}</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Card Number</label>
         <input
-          type="email"
-          value={loginEmail}
-          onChange={(e) => setLoginEmail(e.target.value)}
+          type="text"
+          value={loginAadhar}
+          onChange={(e) => setLoginAadhar(e.target.value.replace(/\D/g, '').slice(0, 12))}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          placeholder="123456789012"
+          maxLength={12}
         />
       </div>
       <div>
@@ -213,20 +218,23 @@ export function AuthModal({ open, mode, onClose, onModeChange, onLoginSuccess }:
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">{t('email')}</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Email/Mobile No.</label>
         <input
-          type="email"
+          type="text"
           value={registerForm.email}
           onChange={(e) => setRegisterForm((prev) => ({ ...prev, email: e.target.value }))}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          placeholder="Enter email or mobile number"
         />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">{t('aadhar')}</label>
         <input
           value={registerForm.aadhar}
-          onChange={(e) => setRegisterForm((prev) => ({ ...prev, aadhar: e.target.value }))}
+          onChange={(e) => setRegisterForm((prev) => ({ ...prev, aadhar: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          placeholder="123456789012"
+          maxLength={12}
         />
       </div>
       <div>
