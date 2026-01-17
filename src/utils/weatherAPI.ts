@@ -173,6 +173,7 @@ export function getWeatherIconUrl(icon: string): string {
 }
 
 export function getWeatherEmoji(description: string): string {
+  if (!description) return "🌤️";
   const lower = description.toLowerCase();
 
   if (lower.includes("clear")) return "☀️";

@@ -75,6 +75,10 @@ export default function EnhancedPredictionForm() {
       const marketPrice = 25; // Default price, should be fetched from API
       const totalRevenue = (totalYield / 100) * marketPrice; // Convert to quintals
 
+      // Derive a simple risk score from model confidence (higher confidence = lower risk)
+      const riskScore = Math.max(5, Math.min(95, Math.round((1 - (prediction.confidence ?? 0.7)) * 100)));
+      const riskLevel = riskScore <= 20 ? 'Low' : riskScore <= 50 ? 'Medium' : 'High';
+
       setResult({
         cropType: formData.cropType,
         location: formData.location,
@@ -87,6 +91,8 @@ export default function EnhancedPredictionForm() {
         confidence: prediction.confidence,
         saved: prediction.saved,
         message: prediction.message,
+        riskScore,
+        riskLevel,
         recommendations: [
           'Based on your soil and weather conditions',
           `Estimated yield: ${(totalYield / 100).toFixed(2)} quintals`,
@@ -425,6 +431,19 @@ export default function EnhancedPredictionForm() {
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       At current market rates
+                    </div>
+                  </div>
+
+                  {/* Risk */}
+                  <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200 flex items-start justify-between gap-3">
+                    {/* Added generous padding so content doesn't merge with border */}
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">Risk Level</div>
+                      <div className="text-2xl font-bold text-green-700">{result.riskLevel}</div>
+                      <div className="text-sm text-gray-700 mt-1">Risk Score: {result.riskScore}%</div>
+                    </div>
+                    <div className="text-4xl" aria-hidden>
+                      ✅
                     </div>
                   </div>
 
