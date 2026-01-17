@@ -75,6 +75,51 @@ export function WeatherWidget({ city, showForecast = false }: WeatherWidgetProps
     }
   }, [city]);
 
+  // Hydrate weather from autoWeatherCache on mount to persist across navigation
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('autoWeatherCache');
+      if (!cached) return;
+      const data = JSON.parse(cached);
+      if (!data?.current || !data?.location) return;
+
+      const hydrated: WeatherData = {
+        location: data.location.address || `${data.location.latitude}, ${data.location.longitude}`,
+        country: 'IN',
+        temperature: data.current.temperature,
+        feelsLike: data.current.temperature,
+        humidity: data.current.humidity,
+        pressure: 1013,
+        windSpeed: 5,
+        precipitation: data.current.rainfall,
+        description: 'Partly cloudy',
+        icon: '02d',
+        sunrise: Math.floor(Date.now() / 1000) - 7200,
+        sunset: Math.floor(Date.now() / 1000) + 7200,
+        cloudiness: 40,
+      };
+
+      setWeather(hydrated);
+      setIsLoading(false);
+      setLastUpdated(new Date());
+
+      if (showForecast && Array.isArray(data.forecast)) {
+        const f: WeatherForecast[] = data.forecast.map((day: any) => ({
+          date: day.date,
+          tempMax: day.temperatureMax,
+          tempMin: day.temperatureMin,
+          description: 'Partly cloudy',
+          icon: '02d',
+          humidity: 65,
+        }));
+        setForecast(f);
+      }
+    } catch (err) {
+      console.warn('Failed to hydrate weather from cache', err);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchWeatherData = async (location: string) => {
     setIsLoading(true);
     
@@ -113,18 +158,13 @@ export function WeatherWidget({ city, showForecast = false }: WeatherWidgetProps
   };
 
   const handleCurrentLocation = () => {
-    // Switch to auto-weather mode and show the modal for location permission
+    // Switch to auto-weather mode and show the modal for location permission without clearing current display
     try {
-      localStorage.removeItem('autoWeatherCache');
-    } catch (_) {
-      /* ignore */
-    }
-    setWeather(null);
-    setForecast([]);
+      localStorage.setItem('autoWeatherModalState', 'open');
+    } catch {}
     setUseAutoWeather(true);
     setShowAutoModal(true); // Show modal when GPS is clicked
     setAutoKey((k) => k + 1);
-    setIsLoading(true);
   };
 
   const getWeatherBackground = (description: string) => {
@@ -166,9 +206,9 @@ export function WeatherWidget({ city, showForecast = false }: WeatherWidgetProps
           </div>
           <button
             type="submit"
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg border border-blue-700/60 hover:bg-blue-700 transition-colors shadow-sm"
           >
-            Search
+            Go
           </button>
           <button
             type="button"

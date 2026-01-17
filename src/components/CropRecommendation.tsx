@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { recommendCrops, estimateSoilPH } from '../utils/mockMLModels';
 import { useI18n } from '../context/LanguageContext';
 import { predictionAPI } from '../utils/api';
@@ -18,6 +18,24 @@ export function CropRecommendation() {
 
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-fill rainfall and temperature from weather cache
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('autoWeatherCache');
+      if (!cached) return;
+      const data = JSON.parse(cached);
+      const temperature = data?.current?.temperature;
+      const rainfall = data?.current?.rainfall;
+      setFormData(prev => ({
+        ...prev,
+        temperature: typeof temperature === 'number' ? Math.round(temperature) : prev.temperature,
+        rainfall: typeof rainfall === 'number' ? Math.round(rainfall) : prev.rainfall,
+      }));
+    } catch (err) {
+      console.warn('CropRecommendation: failed to hydrate from weather cache', err);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

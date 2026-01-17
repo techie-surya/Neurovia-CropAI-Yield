@@ -235,8 +235,36 @@ const LocationModal: React.FC<LocationModalProps> = ({
   }, [isOpen]);
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999] pointer-events-auto">
-      <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 p-6 relative z-[10000]">
+    <div 
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.05)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 99999,
+        pointerEvents: 'auto'
+      }}
+    >
+      <div 
+        style={{ 
+          backgroundColor: 'white',
+          borderRadius: '0.5rem',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          maxWidth: '28rem',
+          width: '100%',
+          margin: '0 1rem',
+          padding: '1.5rem',
+          position: 'relative',
+          zIndex: 100000
+        }}
+      >
         {/* Close Button */}
         <button
           onClick={onCancel}
@@ -265,29 +293,6 @@ const LocationModal: React.FC<LocationModalProps> = ({
           </Alert>
         )}
 
-        {/* Manual Input Section */}
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-sm font-medium text-gray-700 mb-2">Or enter location manually:</p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className="flex-1 px-3 py-2 border rounded-md text-sm"
-              placeholder="Pincode or city name"
-              value={manualLocation}
-              onChange={(e) => setManualLocation(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && onManualInput(manualLocation)}
-              disabled={isLoading}
-            />
-            <Button
-              onClick={() => onManualInput(manualLocation)}
-              disabled={isLoading || !manualLocation.trim()}
-              size="sm"
-            >
-              Go
-            </Button>
-          </div>
-        </div>
-
         {/* Buttons */}
         <div className="flex gap-3">
           <Button
@@ -300,11 +305,11 @@ const LocationModal: React.FC<LocationModalProps> = ({
           </Button>
           <Button
             onClick={onAllow}
-            className="flex-1 bg-blue-600 hover:bg-blue-700"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
             disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
-            Allow Location
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+            <span className="font-medium">Allow Location</span>
           </Button>
         </div>
       </div>
@@ -323,6 +328,7 @@ interface AutoWeatherFetcherProps {
 }
 
 const WEATHER_CACHE_KEY = 'autoWeatherCache';
+const WEATHER_MODAL_STATE_KEY = 'autoWeatherModalState'; // 'open' | 'closed' | 'resolved'
 
 const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
   onWeatherDataFetched,
@@ -350,6 +356,13 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
 
   useEffect(() => {
     console.log('[EFFECT] showModal state changed to:', showModal);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(WEATHER_MODAL_STATE_KEY, showModal ? 'open' : 'closed');
+      }
+    } catch (err) {
+      console.warn('[CACHE] Failed to persist modal state', err);
+    }
   }, [showModal]);
 
   // ============================================================================
@@ -359,6 +372,23 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
   useEffect(() => {
     try {
       if (typeof window === 'undefined') return;
+      if (autoShowModal) {
+        // Explicit request to show modal (e.g., GPS click) overrides persisted state and keeps it open
+        setShowModal(true);
+        try {
+          localStorage.setItem(WEATHER_MODAL_STATE_KEY, 'open');
+        } catch {}
+        return; // do not close the modal in this path
+      }
+
+      // Initialize modal state from localStorage to avoid repeated prompts across navigation
+      const modalState = localStorage.getItem(WEATHER_MODAL_STATE_KEY);
+      if (modalState === 'closed' || modalState === 'resolved') {
+        setShowModal(false);
+      } else if (modalState === 'open') {
+        setShowModal(true);
+      }
+
       const cached = localStorage.getItem(WEATHER_CACHE_KEY);
       if (!cached) return;
 
@@ -376,6 +406,11 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
       setDisplayTime(parsed.displayTime || new Date().toLocaleString());
       setWeatherFetched(true);
       setShowModal(false);
+
+      // Persist resolved state so modal doesn't reappear unnecessarily
+      try {
+        localStorage.setItem(WEATHER_MODAL_STATE_KEY, 'resolved');
+      } catch {}
 
       if (onWeatherDataFetched) {
         onWeatherDataFetched(parsed as WeatherData);
@@ -458,6 +493,11 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
       setShowModal(false);
       setLoading(false);
 
+      // Mark modal as resolved (accepted or manually provided)
+      try {
+        localStorage.setItem(WEATHER_MODAL_STATE_KEY, 'resolved');
+      } catch {}
+
       console.log('Weather data fetched successfully from OpenWeatherMap:', weatherData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch weather data';
@@ -502,6 +542,13 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
     
     // CRITICAL: Must set showModal to true LAST to trigger modal render
     setShowModal(true);
+
+    // Persist open state so it remains open across navigation until closed
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(WEATHER_MODAL_STATE_KEY, 'open');
+      }
+    } catch {}
 
     // Clear persisted cache
     try {
@@ -613,7 +660,12 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
       <LocationModal
         isOpen={true}
         onAllow={requestGeolocation}
-        onCancel={() => setShowModal(false)}
+        onCancel={() => {
+          setShowModal(false);
+          try {
+            localStorage.setItem(WEATHER_MODAL_STATE_KEY, 'closed');
+          } catch {}
+        }}
         onManualInput={handleManualLocationSubmit}
         isLoading={loading}
         manualLocation={manualLocation}

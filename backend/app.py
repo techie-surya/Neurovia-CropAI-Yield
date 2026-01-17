@@ -391,13 +391,20 @@ def login():
         data = request.get_json()
         
         if not data.get('email') or not data.get('password'):
-            return jsonify({'error': 'Email and password required'}), 400
+            return jsonify({'error': 'Email/Aadhar and password required'}), 400
         
-        # Find user
-        user = db['users'].find_one({'email': data['email']})
+        # Find user by email OR aadhar (since frontend sends aadhar as email field)
+        # Check if it's a 12-digit number (Aadhar) or email format
+        identifier = data['email']
+        if identifier.isdigit() and len(identifier) == 12:
+            # It's an Aadhar number
+            user = db['users'].find_one({'aadhar': identifier})
+        else:
+            # It's an email or mobile number
+            user = db['users'].find_one({'email': identifier})
         
         if not user or not check_password(user['password_hash'], data['password']):
-            return jsonify({'error': 'Invalid email or password'}), 401
+            return jsonify({'error': 'Invalid credentials'}), 401
         
         # Create JWT token
         access_token = create_access_token(identity=str(user['_id']))

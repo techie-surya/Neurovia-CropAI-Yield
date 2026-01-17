@@ -14,7 +14,12 @@ export function RegisterPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const validateEmail = (email: string) => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(email);
+  const validateEmail = (email: string) => {
+    // Accept either email format or mobile number (10 digits)
+    const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+    const mobileRegex = /^\d{10}$/;
+    return emailRegex.test(email) || mobileRegex.test(email);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,13 +85,13 @@ export function RegisterPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('email')}</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email/Mobile No.</label>
           <input
-            type="email"
+            type="text"
             value={form.email}
             onChange={(e) => handleChange('email', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
-            placeholder={t('email')}
+            placeholder="Enter email or mobile number"
             required
           />
         </div>

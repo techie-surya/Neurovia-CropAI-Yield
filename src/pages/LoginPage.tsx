@@ -6,7 +6,7 @@ import { authAPI } from '../utils/api';
 export function LoginPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [aadhar, setAadhar] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,15 +15,20 @@ export function LoginPage() {
     e.preventDefault();
     setError('');
     
-    if (!email || !password) {
+    if (!aadhar || !password) {
       setError(t('submit'));
+      return;
+    }
+
+    if (!/^\d{12}$/.test(aadhar)) {
+      setError('Please enter a valid 12-digit Aadhar Card Number');
       return;
     }
 
     setLoading(true);
     try {
       // Call the real authentication API
-      const result = await authAPI.login({ email, password });
+      const result = await authAPI.login({ email: aadhar, password });
       
       if (result.access_token) {
         // Token is already stored by authAPI.login()
@@ -51,13 +56,14 @@ export function LoginPage() {
       <h2 className="text-2xl font-bold mb-4 text-gray-800">{t('login')}</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('email')}</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Card Number</label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={aadhar}
+            onChange={(e) => setAadhar(e.target.value.replace(/\D/g, '').slice(0, 12))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
-            placeholder={t('email')}
+            placeholder="123456789012"
+            maxLength="12"
             required
           />
         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CROP_DATABASE, type CropName, type PredictionInput, optimizeFertilizer, optimizeIrrigation, estimateSoilPH } from '../utils/mockMLModels';
 import { useI18n } from '../context/LanguageContext';
 
@@ -20,6 +20,24 @@ export function FertilizerOptimization() {
   const [fertilizerRec, setFertilizerRec] = useState<any>(null);
   const [irrigationRec, setIrrigationRec] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-fill rainfall and temperature from weather cache
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('autoWeatherCache');
+      if (!cached) return;
+      const data = JSON.parse(cached);
+      const temperature = data?.current?.temperature;
+      const rainfall = data?.current?.rainfall;
+      setFormData(prev => ({
+        ...prev,
+        temperature: typeof temperature === 'number' ? Math.round(temperature) : prev.temperature,
+        rainfall: typeof rainfall === 'number' ? Math.round(rainfall) : prev.rainfall,
+      }));
+    } catch (err) {
+      console.warn('FertilizerOptimization: failed to hydrate from weather cache', err);
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
