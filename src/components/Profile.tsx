@@ -190,25 +190,23 @@ export default function Profile() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Profile Header */}
-        <Card className="bg-white shadow-lg border-2 border-green-200">
-          <CardHeader className="bg-gradient-to-r from-green-600 to-blue-600 text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl">
-                  👤
-                </div>
-                <div>
-                  <CardTitle className="text-2xl font-bold">{userInfo.name}</CardTitle>
-                  <p className="text-green-100">{userInfo.email}</p>
-                </div>
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-6">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl shadow-md">
+                👤
               </div>
-              <div className="text-right">
-                <div className="text-sm text-green-100">Total Predictions</div>
-                <div className="text-3xl font-bold">{pagination.total}</div>
+              <div>
+                <h2 className="text-3xl font-bold mb-1">{userInfo.name}</h2>
+                <p className="text-lg opacity-90">{userInfo.email}</p>
               </div>
             </div>
-          </CardHeader>
-        </Card>
+            <div className="text-right">
+              <div className="text-sm opacity-90 mb-1">Total Predictions</div>
+              <div className="text-4xl font-bold">{pagination.total}</div>
+            </div>
+          </div>
+        </div>
 
         {/* Filter Buttons */}
         <Card>

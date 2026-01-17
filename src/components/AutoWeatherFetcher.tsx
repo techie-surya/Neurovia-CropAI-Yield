@@ -20,6 +20,8 @@ interface CurrentWeather {
   humidity: number;
   rainfall: number;
   timestamp: string;
+  sunrise?: number;
+  sunset?: number;
 }
 
 export interface WeatherData {
@@ -122,6 +124,8 @@ const fetchOpenWeatherData = async (lat: number, lon: number): Promise<{
   humidity: number;
   rainfall: number;
   description: string;
+  sunrise: number;
+  sunset: number;
 } | null> => {
   try {
     const response = await fetch(
@@ -138,6 +142,8 @@ const fetchOpenWeatherData = async (lat: number, lon: number): Promise<{
       humidity: data.main.humidity,
       rainfall: data?.rain?.['1h'] ?? 0,
       description: data.weather[0].description,
+      sunrise: data.sys.sunrise,
+      sunset: data.sys.sunset,
     };
   } catch (error) {
     console.error('OpenWeatherMap error:', error);
@@ -464,6 +470,8 @@ const AutoWeatherFetcher: React.FC<AutoWeatherFetcherProps> = ({
           humidity: currentWeather.humidity,
           rainfall: currentWeather.rainfall,
           timestamp: new Date().toISOString(),
+          sunrise: currentWeather.sunrise,
+          sunset: currentWeather.sunset,
         },
         forecast: forecastData || [],
         location: {

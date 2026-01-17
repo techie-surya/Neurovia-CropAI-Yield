@@ -232,7 +232,6 @@ export default function EnhancedPredictionForm() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <Leaf className="w-5 h-5" />
                 <span>Farm Details</span>
               </CardTitle>
             </CardHeader>
@@ -262,7 +261,6 @@ export default function EnhancedPredictionForm() {
                 {/* Season */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <Calendar className="w-4 h-4 inline mr-1" />
                     Season *
                   </label>
                   <select
