@@ -11,7 +11,6 @@ import Profile from './components/Profile';
 import { RiskPrediction } from './components/RiskPrediction';
 import { Weather } from './components/Weather';
 import { WhatIfSimulator } from './components/WhatIfSimulator';
-import { YieldPrediction } from './components/YieldPrediction';
 import { useI18n } from './context/LanguageContext';
 import { authAPI } from './utils/api';
 
@@ -69,9 +68,9 @@ function App() {
         // Dispatch custom event to notify Dashboard
         window.dispatchEvent(new Event('auth-changed'));
         
-        // Wait a moment then navigate to yield page
+        // Wait a moment then navigate to dashboard (yield flow removed)
         setTimeout(() => {
-          navigate('/yield');
+          navigate('/dashboard');
         }, 100);
       } catch (e) {
         console.error('Parse error:', e);
@@ -103,7 +102,6 @@ function App() {
     { path: '/dashboard', label: t('dashboard') },
     { path: '/weather', label: t('weather') },
     { path: '/predict', label: 'Predict' },
-    { path: '/yield', label: t('yieldPrediction') },
     { path: '/recommendation', label: t('recommendation') },
     { path: '/optimization', label: t('optimization') },
     { path: '/risk', label: t('risk') },
@@ -203,7 +201,6 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/weather" element={<Weather />} />
           <Route path="/predict" element={<EnhancedPredictionForm />} />
-          <Route path="/yield" element={<YieldPrediction />} />
           <Route path="/recommendation" element={<CropRecommendation />} />
           <Route path="/optimization" element={<FertilizerOptimization />} />
           <Route path="/risk" element={<RiskPrediction />} />
@@ -231,9 +228,8 @@ function App() {
                 <h4 className="font-semibold mb-1 text-sm">Quick Demo Guide</h4>
                 <p className="text-xs opacity-90">
                   1. Start with Dashboard overview<br />
-                  2. Try Yield Prediction<br />
-                  3. Test What-If Simulator<br />
-                  4. Show Explainable AI for trust
+                  2. Test What-If Simulator<br />
+                  3. Show Explainable AI for trust
                 </p>
               </div>
             </div>
