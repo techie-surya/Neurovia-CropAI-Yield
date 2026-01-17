@@ -136,12 +136,13 @@ export function Dashboard() {
     { level: 'High Risk', count: 4, color: '#ef4444' }
   ];
 
-  // Recent predictions (mock data)
+  // Recent predictions (mock data with actual dates)
+  const now = new Date();
   const recentPredictions = [
-    { crop: 'Rice', yield: 4500, risk: 'Low', date: 'Jan 8, 2026' },
-    { crop: 'Wheat', yield: 3200, risk: 'Medium', date: 'Jan 7, 2026' },
-    { crop: 'Corn', yield: 5500, risk: 'Low', date: 'Jan 6, 2026' },
-    { crop: 'Cotton', yield: 2800, risk: 'High', date: 'Jan 5, 2026' }
+    { crop: 'Rice', yield: 4500, risk: 'Low', date: new Date(now.getTime() - 9 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { crop: 'Wheat', yield: 3200, risk: 'Medium', date: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { crop: 'Corn', yield: 5500, risk: 'Low', date: new Date(now.getTime() - 11 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { crop: 'Cotton', yield: 2800, risk: 'High', date: new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
   ];
 
   if (error) {
@@ -321,47 +322,6 @@ function PersonalDashboard({ data, loading }: { data: any; loading: boolean }) {
           <div className="text-gray-500 text-center py-4">No risk predictions yet.</div>
         )}
       </div>
-
-      {/* Recent Predictions Table */}
-      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Your Recent Predictions</h3>
-        {recentPreds.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-4 py-2 text-left">Type</th>
-                  <th className="px-4 py-2 text-left">Details</th>
-                  <th className="px-4 py-2 text-left">Confidence</th>
-                  <th className="px-4 py-2 text-left">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPreds.slice(0, 10).map((pred: any, idx: number) => (
-                  <tr key={idx} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-2 font-semibold text-gray-700">{pred.prediction_type?.toUpperCase()}</td>
-                    <td className="px-4 py-2 text-gray-600">
-                      {pred.output_data?.crop && `Crop: ${pred.output_data.crop}`}
-                      {pred.output_data?.yield && `Yield: ${pred.output_data.yield} kg/ha`}
-                      {pred.output_data?.risk_level && `Risk: ${pred.output_data.risk_level}`}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
-                        {(pred.output_data?.confidence * 100 || 0).toFixed(0)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-gray-500 text-xs">
-                      {new Date(pred.created_at).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-gray-500 text-center py-4">No predictions yet. Start making predictions to see them here!</div>
-        )}
-      </div>
     </div>
   );
 }
@@ -404,12 +364,13 @@ function PublicDashboard({ data, loading, isLoggedIn }: { data: any; loading: bo
     { level: 'High Risk', count: 4, color: '#ef4444' }
   ];
 
-  // Recent predictions (mock data)
+  // Recent predictions (mock data with actual dates)
+  const now = new Date();
   const recentPredictions = [
-    { crop: 'Rice', yield: 4500, risk: 'Low', date: 'Jan 8, 2026' },
-    { crop: 'Wheat', yield: 3200, risk: 'Medium', date: 'Jan 7, 2026' },
-    { crop: 'Corn', yield: 5500, risk: 'Low', date: 'Jan 6, 2026' },
-    { crop: 'Cotton', yield: 2800, risk: 'High', date: 'Jan 5, 2026' }
+    { crop: 'Rice', yield: 4500, risk: 'Low', date: new Date(now.getTime() - 9 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { crop: 'Wheat', yield: 3200, risk: 'Medium', date: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { crop: 'Corn', yield: 5500, risk: 'Low', date: new Date(now.getTime() - 11 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { crop: 'Cotton', yield: 2800, risk: 'High', date: new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
   ];
 
   const getRiskBadge = (risk: string) => {
@@ -553,53 +514,19 @@ function PublicDashboard({ data, loading, isLoggedIn }: { data: any; loading: bo
         </ResponsiveContainer>
       </div>
 
-      {/* Recent Predictions Table */}
-      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-        <h3 className="font-semibold text-gray-800 mb-4">📋 {t('recentPredictions')}</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('crop')}</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('predictedYield')}</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('riskLevel')}</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('date')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentPredictions.map((pred, index) => (
-                <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4">
-                    <span className="font-medium text-gray-800">{pred.crop}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-green-700 font-semibold">{pred.yield.toLocaleString()} kg/ha</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRiskBadge(pred.risk)}`}>
-                      {pred.risk} {t('riskBadge')}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-600 text-sm">{pred.date}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Quick Actions */}
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-lg border-2 border-green-200">
+        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: '#E0F7FF', borderColor: '#7FE5E0' }}>
           <div className="text-3xl mb-3" aria-hidden="true"></div>
           <h4 className="font-semibold text-gray-800 mb-2">{t('predictYield')}</h4>
           <p className="text-sm text-gray-600 mb-4">
             {t('yieldPredictionDesc')}
           </p>
           <button
-            className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+            className="w-full text-white py-2 rounded-md transition-colors text-sm font-medium"
+            style={{ backgroundColor: '#00B8D9' }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#0099B8')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#00B8D9')}
             onClick={() => navigate('/yield')}
           >
             {t('startPrediction')}
@@ -607,7 +534,6 @@ function PublicDashboard({ data, loading, isLoggedIn }: { data: any; loading: bo
         </div>
 
         <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-6 rounded-lg border-2 border-blue-200">
-          <div className="text-3xl mb-3">🌱</div>
           <h4 className="font-semibold text-gray-800 mb-2">{t('cropRecommendationTitle')}</h4>
           <p className="text-sm text-gray-600 mb-4">
             {t('recommendationsDesc')}
@@ -621,7 +547,6 @@ function PublicDashboard({ data, loading, isLoggedIn }: { data: any; loading: bo
         </div>
 
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-lg border-2 border-purple-200">
-          <div className="text-3xl mb-3">🎯</div>
           <h4 className="font-semibold text-gray-800 mb-2">{t('simulator')}</h4>
           <p className="text-sm text-gray-600 mb-4">
             Test different scenarios and optimize your farming decisions
@@ -636,7 +561,7 @@ function PublicDashboard({ data, loading, isLoggedIn }: { data: any; loading: bo
       </div>
 
       {/* Platform Benefits */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-8 rounded-lg shadow-lg">
+      <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg">
         <h3 className="text-xl font-bold mb-4">🚀 Platform Benefits</h3>
         <div className="grid md:grid-cols-4 gap-6">
           <div>

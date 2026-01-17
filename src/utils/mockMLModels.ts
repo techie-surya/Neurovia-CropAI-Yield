@@ -734,12 +734,5 @@ export function calculateFeatureImportance(input: PredictionInput): FeatureImpor
     recommendation: kScore < 70 ? 'Apply potash fertilizers (MOP)' : 'Potassium levels are good'
   });
   
-  features.push({
-    feature: 'Soil pH',
-    importance: Math.round((100 - phScore) * 0.10),
-    impact: phScore > 70 ? 'Positive' : phScore > 50 ? 'Moderate' : 'Negative',
-    recommendation: phScore < 70 ? 'Adjust soil pH with lime or sulfur' : 'pH is in optimal range'
-  });
-  
   return features.sort((a, b) => b.importance - a.importance);
 }

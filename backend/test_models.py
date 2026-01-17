@@ -223,7 +223,7 @@ class ModelTester:
             scaler = joblib.load(os.path.join(self.models_dir, 'risk_scaler.pkl'))
             label_encoder = joblib.load(os.path.join(self.models_dir, 'risk_label_encoder.pkl'))
             
-            # Generate test data
+            # Generate test data with ALL required features
             np.random.seed(123)
             test_samples = 500
             
@@ -235,6 +235,11 @@ class ModelTester:
                 rainfall = np.random.uniform(0, 200)
                 crop_age = np.random.uniform(0, 150)
                 soil_moisture = np.random.uniform(20, 80)
+                nitrogen = np.random.uniform(20, 150)
+                phosphorus = np.random.uniform(10, 80)
+                potassium = np.random.uniform(10, 100)
+                soil_ph = np.random.uniform(4.5, 8.5)
+                soil_drainage = np.random.uniform(20, 100)
                 
                 # Determine risk
                 risk_score = 0
@@ -243,6 +248,12 @@ class ModelTester:
                 if rainfall > 100:
                     risk_score += 30
                 if 40 < crop_age < 60:
+                    risk_score += 20
+                if nitrogen < 40:
+                    risk_score += 15
+                if potassium < 30:
+                    risk_score += 20
+                if soil_drainage < 40:
                     risk_score += 20
                 risk_score += np.random.normal(0, 10)
                 risk_score = np.clip(risk_score, 0, 100)
@@ -260,11 +271,18 @@ class ModelTester:
                     'rainfall': rainfall,
                     'crop_age': crop_age,
                     'soil_moisture': soil_moisture,
+                    'nitrogen': nitrogen,
+                    'phosphorus': phosphorus,
+                    'potassium': potassium,
+                    'soil_ph': soil_ph,
+                    'soil_drainage': soil_drainage,
                     'expected_risk': expected
                 })
             
             df_test = pd.DataFrame(risk_data)
-            X_test = df_test[['temperature', 'humidity', 'rainfall', 'crop_age', 'soil_moisture']]
+            # Use ALL 10 features in correct order
+            X_test = df_test[['temperature', 'humidity', 'rainfall', 'crop_age', 'soil_moisture',
+                              'nitrogen', 'phosphorus', 'potassium', 'soil_ph', 'soil_drainage']]
             y_true = df_test['expected_risk']
             
             # Scale and predict

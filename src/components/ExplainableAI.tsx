@@ -332,16 +332,6 @@ export function ExplainableAI() {
                   ))}
                 </div>
               </div>
-
-              {/* Model Info */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  <strong>ℹ️ About the Model:</strong> This analysis uses a Random Forest classifier 
-                  trained on agricultural datasets. Feature importance is calculated using mean decrease 
-                  in impurity (Gini importance), which measures how much each feature contributes to 
-                  reducing prediction uncertainty across all decision trees in the forest.
-                </p>
-              </div>
             </>
           )}
         </div>

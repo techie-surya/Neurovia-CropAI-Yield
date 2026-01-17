@@ -42,8 +42,8 @@ export function WeatherWidget({ city, showForecast = false }: WeatherWidgetProps
       precipitation: data.current.rainfall,
       description: 'Partly cloudy',
       icon: '02d',
-      sunrise: Math.floor(Date.now() / 1000) - 7200,
-      sunset: Math.floor(Date.now() / 1000) + 7200,
+      sunrise: data.current.sunrise || Math.floor(Date.now() / 1000) - 7200,
+      sunset: data.current.sunset || Math.floor(Date.now() / 1000) + 7200,
       cloudiness: 40,
     };
     
@@ -94,8 +94,8 @@ export function WeatherWidget({ city, showForecast = false }: WeatherWidgetProps
         precipitation: data.current.rainfall,
         description: 'Partly cloudy',
         icon: '02d',
-        sunrise: Math.floor(Date.now() / 1000) - 7200,
-        sunset: Math.floor(Date.now() / 1000) + 7200,
+        sunrise: data.current.sunrise || Math.floor(Date.now() / 1000) - 7200,
+        sunset: data.current.sunset || Math.floor(Date.now() / 1000) + 7200,
         cloudiness: 40,
       };
 

@@ -211,34 +211,27 @@ export default function HistoricalRecords() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <Card className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white border-0">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center space-x-2">
-                <TrendingUp className="w-8 h-8" />
-                <span>Historical Records & Analytics</span>
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={exportToExcel}
-                  className="bg-white text-blue-600 hover:bg-gray-100"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Excel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={exportToPDF}
-                  className="bg-white text-blue-600 hover:bg-gray-100"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  PDF
-                </Button>
-              </div>
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg">
+          <div className="flex items-center justify-between">
+            <h2 className="text-3xl font-bold">Historical Records & Analytics</h2>
+            <div className="flex gap-3">
+              <Button
+                onClick={exportToExcel}
+                className="bg-white text-green-700 hover:bg-green-50 font-semibold px-4 py-2 shadow-md border border-green-200"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Excel
+              </Button>
+              <Button
+                onClick={exportToPDF}
+                className="bg-white text-green-700 hover:bg-green-50 font-semibold px-4 py-2 shadow-md border border-green-200"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                PDF
+              </Button>
+            </div>
+          </div>
+        </div>
 
         {/* Summary Cards */}
         <div className="grid md:grid-cols-3 gap-4">

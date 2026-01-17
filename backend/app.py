@@ -688,14 +688,24 @@ def predict_crop():
         
         data = request.get_json()
         
-        # Extract features for the trained model
-        input_features = np.array([[
-            data.get('rainfall', 1500),
-            data.get('temperature', 25),
-            data.get('soil_type', 2),  # 1=clay, 2=loam, 3=sandy, 4=laterite
-            data.get('season', 1),     # 1=kharif, 2=rabi, 3=summer
-            data.get('ph_level', 7.0)
-        ]])
+        # Extract features matching the trained production model
+        # Expected features: nitrogen, phosphorus, potassium, temperature, ph, rainfall, npk_ratio
+        nitrogen = data.get('nitrogen', 80)
+        phosphorus = data.get('phosphorus', 40)
+        potassium = data.get('potassium', 40)
+        temperature = data.get('temperature', 25)
+        ph = data.get('ph', 7.0)
+        rainfall = data.get('rainfall', 1200)
+        npk_ratio = data.get('npk_ratio')
+        if npk_ratio is None:
+            # Derive a simple NPK ratio feature if not provided
+            npk_ratio = (nitrogen + phosphorus + potassium) / 3 if all(isinstance(v, (int, float)) for v in [nitrogen, phosphorus, potassium]) else 0.0
+
+        # Log the received values for debugging
+        print(f"Crop prediction input - N:{nitrogen} P:{phosphorus} K:{potassium} T:{temperature} pH:{ph} R:{rainfall} npk_ratio:{npk_ratio}")
+
+        input_features = np.array([[nitrogen, phosphorus, potassium, temperature, ph, rainfall, npk_ratio]])
+        model_error = None
         
         confidence = 0.80
         top_crops = []
@@ -724,6 +734,7 @@ def predict_crop():
                 ]
                 
             except Exception as model_error:
+                model_error = str(model_error)
                 print(f"Crop model prediction error: {model_error}")
                 # Fallback to mock
                 crop_name = 'rice'
@@ -750,11 +761,12 @@ def predict_crop():
                 'user_id': ObjectId(user_id),
                 'prediction_type': 'crop',
                 'input_data': {
-                    'rainfall': data.get('rainfall'),
-                    'temperature': data.get('temperature'),
-                    'soil_type': data.get('soil_type'),
-                    'season': data.get('season'),
-                    'ph_level': data.get('ph_level')
+                    'nitrogen': nitrogen,
+                    'phosphorus': phosphorus,
+                    'potassium': potassium,
+                    'temperature': temperature,
+                    'ph': ph,
+                    'rainfall': rainfall
                 },
                 'output_data': {'crop': crop_name, 'confidence': confidence},
                 'model_type': 'trained' if models['crop_model'] else 'mock',
@@ -773,6 +785,15 @@ def predict_crop():
             'recommended_crop': crop_name,
             'confidence': round(confidence, 3),
             'model_status': 'Trained Model' if models['crop_model'] else 'Mock Model',
+            'debug_input': {
+                'nitrogen': nitrogen,
+                'phosphorus': phosphorus,
+                'potassium': potassium,
+                'temperature': temperature,
+                'ph': ph,
+                'rainfall': rainfall
+            },
+            'model_error': model_error,
             'top_3': top_crops if top_crops else [
                 {'crop': 'rice', 'confidence': 0.70},
                 {'crop': 'wheat', 'confidence': 0.20},
