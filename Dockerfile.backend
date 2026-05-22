@@ -1,27 +1,67 @@
+# =========================================================
+# Base Python Image
+# =========================================================
 FROM python:3.9-slim
 
-WORKDIR /app
+# =========================================================
+# Environment Variables
+# =========================================================
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APP_HOME=/app
 
-# Install system dependencies
+# =========================================================
+# Set Working Directory
+# =========================================================
+WORKDIR ${APP_HOME}
+
+# =========================================================
+# Install System Dependencies
+# =========================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    curl \
+    build-essential \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY backend/requirements.txt .
+# =========================================================
+# Copy Requirements First (Better Docker Caching)
+# =========================================================
+COPY backend/requirements.txt ./requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# =========================================================
+# Upgrade pip and Install Python Dependencies
+# =========================================================
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
-# Copy backend code
+# =========================================================
+# Copy Application Source Code
+# =========================================================
 COPY backend/ .
 
-# Expose port
+# =========================================================
+# Expose Application Port
+# =========================================================
 EXPOSE 5000
 
-# Health check
+# =========================================================
+# Health Check
+# =========================================================
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:5000/health')"
+CMD curl --fail http://localhost:5000/health || exit 1
 
-# Start application with Gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# =========================================================
+# Start Gunicorn Server
+# =========================================================
+CMD [
+    "gunicorn",
+    "--workers=4",
+    "--bind=0.0.0.0:5000",
+    "--access-logfile=-",
+    "--error-logfile=-",
+    "--timeout=120",
+    "app:app"
+]
