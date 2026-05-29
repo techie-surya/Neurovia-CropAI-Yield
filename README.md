@@ -17,6 +17,8 @@ This platform also helps in predicting historical agricultural data, weather pat
 - **🧪 Fertilizer Optimization** - Nutrient recommendations based on soil analysis
 - **🔐 Secure Authentication** - Email-based user accounts with secure password storage
 - **🌐 Responsive UI** - Modern React interface optimized for desktop and mobile
+- dashboard:<img width="1203" height="651" alt="DASHBOARD IMAGE" src="https://github.com/user-attachments/assets/8745c5e0-7e36-4ede-aa49-3ceac619b63d" />
+
 
 ## 🛠️ Tech Stack
 
